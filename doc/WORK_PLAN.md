@@ -83,7 +83,7 @@
 
 ## 7. 인증 정책
 
-- `POST /gen`, `DELETE /{hash}`는 `Authorization` 헤더가 `APP_KEY`와 일치해야 한다.
+- `POST /gen`, `DELETE /{hash}`, `GET /stat`는 `Authorization: Bearer <APP_KEY>` 헤더가 필요하다.
 - 초기 구현은 단일 shared secret 방식으로 단순하게 유지한다.
 - 인증 실패는 `401 Unauthorized`로 반환하고, 내부 키 값은 로그나 응답에 노출하지 않는다.
 - 비교 방식은 불필요한 문자열 복제를 피하고, 필요하면 constant-time 비교 crate 도입을 검토한다.

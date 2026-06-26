@@ -16,7 +16,7 @@ MongoDB backed URL shortener written in Rust.
 The application reads the following environment variables:
 
 - `MONGO_URI`: MongoDB connection string
-- `APP_KEY`: shared secret used by `POST /gen`, `DELETE /{hash}`, and `GET /stat`
+- `APP_KEY`: bearer token secret used by `POST /gen`, `DELETE /{hash}`, and `GET /stat`
 - `APP_HOSTNAME`: base URL used to build returned short URLs
 - `APP_BIND_ADDR`: optional bind address, defaults to `0.0.0.0:8080`
 - `MONGO_DATABASE`: optional database name, defaults to `rlnk`
@@ -49,7 +49,7 @@ Create a short URL:
 
 ```sh
 curl -X POST http://localhost:8080/gen \
-  -H 'Authorization: dev-secret' \
+  -H 'Authorization: Bearer dev-secret' \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://example.com","ttl":"10m"}'
 ```
@@ -58,14 +58,14 @@ Delete a short URL:
 
 ```sh
 curl -X DELETE http://localhost:8080/abc123 \
-  -H 'Authorization: dev-secret'
+  -H 'Authorization: Bearer dev-secret'
 ```
 
 Fetch statistics:
 
 ```sh
 curl http://localhost:8080/stat \
-  -H 'Authorization: dev-secret'
+  -H 'Authorization: Bearer dev-secret'
 ```
 
 Resolve a short URL:

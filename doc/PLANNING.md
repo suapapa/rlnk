@@ -12,7 +12,7 @@ Rust로 작성된 초소형 고성능 URL shortener 앱.
   - 존재하지 않거나 만료된 hash는 `404 Not Found`로 반환한다.
 - `GET /stat`: 생성된 링크들의 원본 링크, 접근 횟수, 마지막 접근 일자 반환
 - `POST /gen`, `DELETE /{hash}`, `GET /stat`는 `Authorization` 헤더로 보안 강화
-  - `Authorization` 헤더 값은 `APP_KEY`와 일치해야 한다.
+  - `Authorization: Bearer <APP_KEY>` 형식으로 인증한다.
 - Dockerfile 필요
 - Docker Compose 기반 로컬 실행을 지원하고, `.env.sample`을 제공한다.
 - 환경변수로 `MONGO_URI`, `APP_KEY`, `APP_HOSTNAME` 등을 받는다.

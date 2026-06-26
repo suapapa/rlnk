@@ -14,11 +14,14 @@ use rlnk::{
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
 
+const TEST_APP_KEY: &str = "test-key";
+const TEST_AUTHORIZATION: &str = "Bearer test-key";
+
 fn test_app() -> Router {
     let config = Arc::new(
         AppConfig::from_pairs([
             ("MONGO_URI", "mongodb://localhost:27017"),
-            ("APP_KEY", "test-key"),
+            ("APP_KEY", TEST_APP_KEY),
             ("APP_HOSTNAME", "https://rlnk.test"),
         ])
         .expect("test config should load"),
@@ -31,7 +34,7 @@ fn authed_request(method: &str, uri: &str, body: Body) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(uri)
-        .header(header::AUTHORIZATION, "test-key")
+        .header(header::AUTHORIZATION, TEST_AUTHORIZATION)
         .header(header::CONTENT_TYPE, "application/json")
         .body(body)
         .expect("request should build")
@@ -45,6 +48,24 @@ where
         .await
         .expect("body should read");
     serde_json::from_slice(&bytes).expect("body should deserialize")
+}
+
+#[tokio::test]
+async fn post_gen_should_reject_raw_authorization_key() {
+    let response = test_app()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/gen")
+                .header(header::AUTHORIZATION, TEST_APP_KEY)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"url":"https://example.com"}"#))
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should complete");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
