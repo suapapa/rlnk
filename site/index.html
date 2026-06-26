@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta
+      name="description"
+      content="rlnk는 Rust, axum, tokio, MongoDB로 만든 작고 빠른 URL 단축 API입니다."
+    >
+    <meta name="theme-color" content="#080a0e">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap"
+      rel="stylesheet"
+    >
+    <title>rlnk - 작고 빠른 Rust URL 단축 API</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --font-sans: "Gowun Dodum", system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        --font-mono:
+          ui-monospace, "SFMono-Regular", "Cascadia Mono", "Liberation Mono",
+          Menlo, Consolas, monospace;
+        --bg: #080a0e;
+        --bg-soft: #0f1117;
+        --surface: #15191d;
+        --surface-strong: #1d2420;
+        --line: #33413a;
+        --line-soft: #26302c;
+        --text: #f8fafc;
+        --text-muted: #b8c4bf;
+        --text-soft: #8ea09a;
+        --accent: #22c55e;
+        --accent-strong: #86efac;
+        --cyan: #67e8f9;
+        --amber: #fbbf24;
+        --danger: #f87171;
+        --shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+        --radius: 8px;
+        --content: 1120px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 1.65;
+        text-rendering: optimizeLegibility;
+        word-break: keep-all;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      a,
+      button,
+      summary {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(134, 239, 172, 0.18);
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .skip-link {
+        position: absolute;
+        left: 16px;
+        top: 12px;
+        z-index: 20;
+        transform: translateY(-160%);
+        border-radius: var(--radius);
+        background: var(--accent);
+        color: #051208;
+        padding: 10px 14px;
+        font-weight: 700;
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      :focus-visible {
+        outline: 3px solid var(--accent-strong);
+        outline-offset: 4px;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid var(--line-soft);
+        background: rgba(8, 10, 14, 0.9);
+        backdrop-filter: blur(16px);
+      }
+
+      .header-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        max-width: var(--content);
+        min-height: 68px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        color: var(--text);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        color: var(--accent);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .nav a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        border-radius: var(--radius);
+        padding: 0 12px;
+        text-decoration: none;
+        transition:
+          background 180ms ease,
+          color 180ms ease;
+      }
+
+      .nav a:hover {
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      main {
+        overflow: hidden;
+      }
+
+      .section {
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      #main,
+      section[id] {
+        scroll-margin-top: 84px;
+      }
+
+      .section-inner {
+        max-width: var(--content);
+        margin: 0 auto;
+        padding: 72px 24px;
+      }
+
+      .hero {
+        min-height: 72dvh;
+        display: grid;
+        align-items: center;
+      }
+
+      .hero-inner {
+        display: grid;
+        justify-items: center;
+        gap: 24px;
+        text-align: center;
+      }
+
+      .logo {
+        width: min(520px, 100%);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--accent-strong);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin-top: 0;
+        letter-spacing: 0;
+        text-wrap: balance;
+      }
+
+      p {
+        margin-top: 0;
+        text-wrap: pretty;
+      }
+
+      h1 {
+        max-width: 880px;
+        margin-bottom: 0;
+        font-size: 64px;
+        line-height: 1.04;
+      }
+
+      h2 {
+        margin-bottom: 18px;
+        font-size: 34px;
+        line-height: 1.18;
+      }
+
+      h3 {
+        margin-bottom: 10px;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin-bottom: 0;
+        color: var(--text-muted);
+        font-size: 19px;
+      }
+
+      .run-grid .lead {
+        margin-bottom: 24px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        min-height: 48px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0 18px;
+        color: var(--text);
+        font-weight: 700;
+        text-decoration: none;
+        transition:
+          background 180ms ease,
+          border-color 180ms ease,
+          color 180ms ease;
+      }
+
+      .button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #051208;
+      }
+
+      .button:hover {
+        border-color: var(--accent-strong);
+        background: var(--surface-strong);
+        color: var(--text);
+      }
+
+      .button.primary:hover {
+        background: var(--accent-strong);
+        color: #051208;
+      }
+
+      .button svg {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+      }
+
+      .nav svg {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+
+      .signal-list {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        margin: 8px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .signal-list li {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 12px;
+        color: var(--text-muted);
+        background: rgba(21, 25, 29, 0.72);
+        font-size: 14px;
+        overflow-wrap: anywhere;
+      }
+
+      .section-heading {
+        max-width: 760px;
+        margin-bottom: 34px;
+      }
+
+      .section-heading p {
+        margin-bottom: 0;
+        color: var(--text-muted);
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .feature-card,
+      .step-card {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .feature-card {
+        padding: 24px;
+      }
+
+      .feature-card p,
+      .step-card p {
+        margin-bottom: 0;
+        color: var(--text-muted);
+      }
+
+      .icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        margin-bottom: 20px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        color: var(--accent-strong);
+        background: #0c120f;
+      }
+
+      .icon svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .band {
+        background: var(--bg-soft);
+      }
+
+      .endpoint-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .endpoint-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .endpoint-card[open] {
+        border-color: var(--accent);
+      }
+
+      .endpoint-summary {
+        display: grid;
+        grid-template-columns: auto minmax(76px, max-content) auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        min-height: 64px;
+        padding: 14px 18px;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .endpoint-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .endpoint-path {
+        min-width: 0;
+        color: var(--text);
+        font-weight: 700;
+        overflow-wrap: anywhere;
+      }
+
+      .endpoint-auth,
+      .endpoint-copy {
+        min-width: 0;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .endpoint-chevron {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        color: var(--accent-strong);
+        transition: transform 180ms ease;
+      }
+
+      .endpoint-card[open] .endpoint-chevron {
+        transform: rotate(180deg);
+      }
+
+      .endpoint-body {
+        border-top: 1px solid var(--line-soft);
+        padding: 18px;
+      }
+
+      .endpoint-body .code-panel {
+        box-shadow: none;
+      }
+
+      code,
+      .method {
+        font-family: var(--font-mono);
+      }
+
+      code {
+        font-size: 0.94em;
+        overflow-wrap: anywhere;
+        word-break: normal;
+      }
+
+      .method {
+        display: inline-flex;
+        min-width: 70px;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 3px 8px;
+        color: var(--accent-strong);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .method.get {
+        color: var(--cyan);
+      }
+
+      .method.delete {
+        color: var(--danger);
+      }
+
+      .run-grid {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 24px;
+        align-items: start;
+      }
+
+      .steps {
+        display: grid;
+        gap: 14px;
+      }
+
+      .step-card {
+        padding: 20px;
+      }
+
+      .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        margin-bottom: 14px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #051208;
+        font-weight: 700;
+      }
+
+      .code-panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #050608;
+        box-shadow: var(--shadow);
+      }
+
+      .code-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .code-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 48px;
+        border-bottom: 1px solid var(--line-soft);
+        padding: 0 16px;
+        color: var(--text-soft);
+        font-size: 14px;
+      }
+
+      .code-title span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .copy-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 32px;
+        border: 1px solid var(--line-soft);
+        border-radius: 6px;
+        padding: 0 10px;
+        color: var(--text-muted);
+        background: #0f1418;
+        font: inherit;
+        line-height: 1;
+        cursor: pointer;
+        transition:
+          border-color 180ms ease,
+          color 180ms ease,
+          background 180ms ease,
+          transform 180ms ease;
+      }
+
+      .copy-button:hover {
+        border-color: var(--accent);
+        color: var(--text);
+        background: #132019;
+        transform: translateY(-1px);
+      }
+
+      .copy-button:disabled {
+        cursor: default;
+        transform: none;
+      }
+
+      .copy-button[data-state="copied"] {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+        background: rgba(34, 197, 94, 0.12);
+      }
+
+      .copy-button[data-state="failed"] {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: rgba(248, 113, 113, 0.12);
+      }
+
+      .copy-button svg {
+        width: 16px;
+        height: 16px;
+        flex: none;
+      }
+
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        padding: 18px;
+        color: #d5fce0;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        line-height: 1.6;
+        word-break: normal;
+      }
+
+      pre code {
+        overflow-wrap: normal;
+        white-space: pre;
+        word-break: normal;
+      }
+
+      .code-comment {
+        color: #90a399;
+      }
+
+      .code-key {
+        color: var(--cyan);
+      }
+
+      .code-value {
+        color: var(--amber);
+      }
+
+      .footer {
+        color: var(--text-soft);
+        background: #050608;
+      }
+
+      .footer .section-inner {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        padding-top: 32px;
+        padding-bottom: 32px;
+        font-size: 14px;
+      }
+
+      @media (max-width: 900px) {
+        h1 {
+          font-size: 48px;
+        }
+
+        .feature-grid,
+        .run-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .header-inner {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 4px;
+          padding: 10px 18px;
+        }
+
+        .nav {
+          width: 100%;
+          overflow-x: auto;
+          padding-bottom: 2px;
+        }
+
+        .section-inner {
+          padding: 54px 18px;
+        }
+
+        .hero {
+          min-height: auto;
+        }
+
+        .hero-inner {
+          gap: 18px;
+        }
+
+        .logo {
+          width: min(360px, 100%);
+          border-radius: 20px;
+        }
+
+        h1 {
+          font-size: 40px;
+        }
+
+        h2 {
+          font-size: 28px;
+        }
+
+        .lead {
+          font-size: 17px;
+        }
+
+        .actions {
+          width: 100%;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .endpoint-summary {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px 12px;
+        }
+
+        .endpoint-copy {
+          width: 100%;
+        }
+
+        .endpoint-chevron {
+          margin-left: auto;
+        }
+
+        .footer .section-inner {
+          flex-direction: column;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">본문으로 이동</a>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#top" aria-label="rlnk 홈" translate="no">
+          <span class="brand-mark">r</span>lnk
+        </a>
+        <nav class="nav" aria-label="주요 섹션">
+          <a href="#features">특징</a>
+          <a href="#api">API</a>
+          <a href="#install">설치</a>
+          <a href="https://github.com/suapapa/rlnk" target="_blank" rel="noopener noreferrer">
+            GitHub
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="section hero" id="top" aria-labelledby="hero-title">
+        <div class="section-inner hero-inner">
+          <img
+            class="logo"
+            src="assets/rlnk-logo.png"
+            width="811"
+            height="378"
+            alt="rlnk 로고, 작고 빠른 Rust URL 단축 API"
+          >
+          <p class="eyebrow">Rust + axum + tokio + MongoDB</p>
+          <h1 id="hero-title">작고 빠른 URL 단축 API</h1>
+          <p class="lead">
+            rlnk는 짧은 링크 생성, 리다이렉트, 삭제, 통계 조회를 단순한 API로 처리하는 고성능 URL 단축 서비스입니다.
+          </p>
+          <div class="actions" aria-label="바로가기">
+            <a class="button primary" href="#install">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Docker Compose로 실행
+            </a>
+            <a class="button" href="#api">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              API 보기
+            </a>
+          </div>
+          <ul class="signal-list" aria-label="핵심 속성">
+            <li><code>HTTP/HTTPS</code> URL 검증</li>
+            <li><code>Authorization: Bearer APP_KEY</code></li>
+            <li><code>TTL</code>: <code>10m</code>, <code>24h</code>, <code>7d</code></li>
+            <li><code>ACCESS_CACHE_SIZE</code> 기본값 <code>1024</code></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section band" id="features" aria-labelledby="features-title">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="eyebrow">프로젝트 개요</p>
+            <h2 id="features-title">API는 작게, 실행은 간단하게</h2>
+            <p>
+              Rust 비동기 HTTP 서버와 MongoDB 저장소를 바탕으로 명시적인 오류 처리와 작은 컨테이너 이미지를 제공합니다.
+              설치와 API 사용 흐름은 필요한 단계만 남겨 짧게 유지했습니다.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 13h6l-2 7 12-12h-6l2-6L4 13z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <h3>비동기 Rust 서버</h3>
+              <p>
+                <code>axum</code>과 <code>tokio</code> 기반 비동기 서버입니다. MongoDB 접근도 async API로 처리해 핸들러 안에 blocking I/O를 두지 않습니다.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <h3>TTL과 최근 접근 캐시</h3>
+              <p>
+                <code>10m</code>, <code>24h</code>, <code>7d</code> 같은 duration 형식으로 만료 시각을 계산하고, 반복 조회는 크기 제한 캐시로 DB 접근을 줄입니다.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3l7 4v5c0 4.5-2.8 7.7-7 9-4.2-1.3-7-4.5-7-9V7l7-4zM9 12l2 2 4-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <h3>관리 API 보호</h3>
+              <p>
+                링크 생성, 삭제, 통계 조회는 <code>Authorization: Bearer &lt;APP_KEY&gt;</code> 헤더로 보호합니다.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="api" aria-labelledby="api-title">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="eyebrow">API</p>
+            <h2 id="api-title">생성부터 통계까지 엔드포인트 4개</h2>
+            <p>
+              사용자 지정 hash는 받지 않고 서버가 URL-safe hash를 만듭니다.
+              각 항목을 펼치면 바로 실행해 볼 수 있는 curl 예제가 나옵니다.
+            </p>
+          </div>
+
+          <div class="endpoint-list" aria-label="API 엔드포인트 예제">
+            <details class="endpoint-card">
+              <summary class="endpoint-summary">
+                <span class="method">POST</span>
+                <span class="endpoint-path"><code>/gen</code></span>
+                <span class="endpoint-auth">인증 필요</span>
+                <span class="endpoint-copy">원본 URL과 선택 TTL을 받아 짧은 URL과 hash를 반환합니다.</span>
+                <span class="endpoint-chevron" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </summary>
+              <div class="endpoint-body">
+                <div class="code-panel" aria-label="POST /gen curl 예제">
+                  <div class="code-title">
+                    <span>curl</span>
+                    <span>링크 생성</span>
+                  </div>
+                  <pre><code>curl -X POST https://rlnk.example.com/gen \
+  -H <span class="code-value">'Authorization: Bearer change-me'</span> \
+  -H <span class="code-value">'Content-Type: application/json'</span> \
+  -d <span class="code-value">'{"url":"https://example.com","ttl":"10m"}'</span></code></pre>
+                </div>
+              </div>
+            </details>
+
+            <details class="endpoint-card">
+              <summary class="endpoint-summary">
+                <span class="method get">GET</span>
+                <span class="endpoint-path"><code>/{hash}</code></span>
+                <span class="endpoint-auth">인증 없음</span>
+                <span class="endpoint-copy">원본 URL로 리다이렉트합니다. 만료됐거나 없는 hash는 404입니다.</span>
+                <span class="endpoint-chevron" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </summary>
+              <div class="endpoint-body">
+                <div class="code-panel" aria-label="GET /{hash} curl 예제">
+                  <div class="code-title">
+                    <span>curl</span>
+                    <span>리다이렉트</span>
+                  </div>
+                  <pre><code>curl -i https://rlnk.example.com/abc123</code></pre>
+                </div>
+              </div>
+            </details>
+
+            <details class="endpoint-card">
+              <summary class="endpoint-summary">
+                <span class="method delete">DELETE</span>
+                <span class="endpoint-path"><code>/{hash}</code></span>
+                <span class="endpoint-auth">인증 필요</span>
+                <span class="endpoint-copy">지정한 hash의 링크를 삭제합니다. 없는 hash는 404입니다.</span>
+                <span class="endpoint-chevron" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </summary>
+              <div class="endpoint-body">
+                <div class="code-panel" aria-label="DELETE /{hash} curl 예제">
+                  <div class="code-title">
+                    <span>curl</span>
+                    <span>링크 삭제</span>
+                  </div>
+                  <pre><code>curl -X DELETE https://rlnk.example.com/abc123 \
+  -H <span class="code-value">'Authorization: Bearer change-me'</span></code></pre>
+                </div>
+              </div>
+            </details>
+
+            <details class="endpoint-card">
+              <summary class="endpoint-summary">
+                <span class="method get">GET</span>
+                <span class="endpoint-path"><code>/stat</code></span>
+                <span class="endpoint-auth">인증 필요</span>
+                <span class="endpoint-copy">원본 URL, 접근 횟수, 생성·만료·마지막 접근 시각을 반환합니다.</span>
+                <span class="endpoint-chevron" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </summary>
+              <div class="endpoint-body">
+                <div class="code-panel" aria-label="GET /stat curl 예제">
+                  <div class="code-title">
+                    <span>curl</span>
+                    <span>통계 조회</span>
+                  </div>
+                  <pre><code>curl https://rlnk.example.com/stat \
+  -H <span class="code-value">'Authorization: Bearer change-me'</span></code></pre>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section band" id="install" aria-labelledby="install-title">
+        <div class="section-inner run-grid">
+          <div>
+            <p class="eyebrow">설치</p>
+            <h2 id="install-title">Docker Compose로 바로 실행</h2>
+            <p class="lead">
+              <code>.env</code>와 <code>docker-compose.yml</code> 예제를 참고해 배포하세요.
+              <code>APP_HOSTNAME</code>에는 실제 공개 주소를 넣습니다.
+            </p>
+            <div class="steps" aria-label="실행 단계">
+              <article class="step-card">
+                <span class="step-number">1</span>
+                <h3>환경 파일 준비</h3>
+                <p><code>.env</code>에는 앱 키와 공개 호스트명처럼 환경마다 달라지는 값만 넣습니다.</p>
+              </article>
+              <article class="step-card">
+                <span class="step-number">2</span>
+                <h3>스택 시작</h3>
+                <p><code>docker compose up -d</code>로 rlnk 컨테이너를 백그라운드에 띄웁니다.</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="code-stack">
+            <div class="code-panel" aria-label=".env 예시">
+              <div class="code-title">
+                <span>.env</span>
+                <button class="copy-button" type="button" data-copy-target="env-example" data-state="idle" aria-label=".env 예제를 클립보드에 복사">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+                    <path d="M16 4H6a2 2 0 0 0-2 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="copy-label" aria-live="polite" aria-atomic="true">복사</span>
+                </button>
+              </div>
+              <pre><code id="env-example">APP_KEY=change-me
+APP_HOSTNAME=https://rlnk.example.com
+APP_BIND_ADDR=0.0.0.0:8080
+MONGO_URI=mongodb://localhost:27017
+MONGO_DATABASE=rlnk
+MONGO_COLLECTION=links
+HASH_LENGTH=8
+ACCESS_CACHE_SIZE=1024</code></pre>
+            </div>
+
+            <div class="code-panel" aria-label="docker-compose.yml 예시">
+              <div class="code-title">
+                <span>docker-compose.yml</span>
+                <button class="copy-button" type="button" data-copy-target="compose-example" data-state="idle" aria-label="docker-compose.yml 예제를 클립보드에 복사">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+                    <path d="M16 4H6a2 2 0 0 0-2 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="copy-label" aria-live="polite" aria-atomic="true">복사</span>
+                </button>
+              </div>
+              <pre><code id="compose-example">services:
+  rlnk:
+    image: ghcr.io/suapapa/rlnk:latest
+    env_file:
+      - .env
+    ports:
+      - 8080:8080</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="section-inner">
+        <span>rlnk - 작고 빠른 Rust URL 단축 API</span>
+        <span>Homin Lee &lt;i@homin.dev&gt;. All rights reserved.</span>
+      </div>
+    </footer>
+
+    <script>
+      (() => {
+        const copyText = async (text) => {
+          if (navigator.clipboard && window.isSecureContext) {
+            try {
+              await navigator.clipboard.writeText(text);
+              return;
+            } catch (_error) {
+              // Fall back to a hidden textarea when clipboard writes are rejected.
+            }
+          }
+
+          const textArea = document.createElement("textarea");
+          textArea.value = text;
+          textArea.setAttribute("readonly", "");
+          textArea.style.position = "fixed";
+          textArea.style.inset = "auto auto 0 -9999px";
+          document.body.appendChild(textArea);
+          textArea.select();
+
+          try {
+            if (!document.execCommand("copy")) {
+              throw new Error("copy failed");
+            }
+          } finally {
+            document.body.removeChild(textArea);
+          }
+        };
+
+        document.querySelectorAll("[data-copy-target]").forEach((button) => {
+          const label = button.querySelector(".copy-label");
+          const defaultLabel = label ? label.textContent : "";
+
+          button.addEventListener("click", async () => {
+            const targetId = button.getAttribute("data-copy-target");
+            const target = targetId ? document.getElementById(targetId) : null;
+
+            if (!target || !label) {
+              return;
+            }
+
+            button.disabled = true;
+
+            try {
+              await copyText(target.textContent);
+              button.dataset.state = "copied";
+              label.textContent = "복사됨";
+            } catch (_error) {
+              button.dataset.state = "failed";
+              label.textContent = "실패";
+            } finally {
+              window.setTimeout(() => {
+                button.disabled = false;
+                button.dataset.state = "idle";
+                label.textContent = defaultLabel;
+              }, 1600);
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
