@@ -1028,6 +1028,197 @@ ACCESS_CACHE_SIZE=1024</code></pre>
 
     <script>
       (() => {
+        const preferredLanguage = (() => {
+          const languages =
+            Array.isArray(navigator.languages) && navigator.languages.length > 0
+              ? navigator.languages
+              : [navigator.language];
+
+          return (languages[0] || "").toLowerCase();
+        })();
+
+        const setText = (selector, text) => {
+          document.querySelectorAll(selector).forEach((element) => {
+            element.textContent = text;
+          });
+        };
+
+        const setHtml = (selector, html) => {
+          document.querySelectorAll(selector).forEach((element) => {
+            element.innerHTML = html;
+          });
+        };
+
+        const setAttribute = (selector, name, value) => {
+          document.querySelectorAll(selector).forEach((element) => {
+            element.setAttribute(name, value);
+          });
+        };
+
+        const setButtonLabel = (selector, text) => {
+          const element = document.querySelector(selector);
+
+          if (!element) {
+            return;
+          }
+
+          const icon = element.querySelector("svg");
+          element.textContent = "";
+
+          if (icon) {
+            element.append(icon, text);
+          } else {
+            element.textContent = text;
+          }
+        };
+
+        const applyEnglishCopy = () => {
+          document.documentElement.lang = "en";
+          document.title = "rlnk - Small, fast Rust URL shortener API";
+
+          setAttribute(
+            'meta[name="description"]',
+            "content",
+            "rlnk is a small, fast URL shortener API built with Rust, axum, tokio, and MongoDB.",
+          );
+
+          [
+            [".skip-link", "Skip to main content"],
+            ['.nav a[href="#features"]', "Features"],
+            ['.nav a[href="#install"]', "Install"],
+            [".hero .eyebrow", "Rust + axum + tokio + MongoDB"],
+            ["#hero-title", "Small, fast URL shortener API"],
+            ["#features .section-heading .eyebrow", "Project overview"],
+            ["#features-title", "Small API, simple deployment"],
+            [".feature-card:nth-child(1) h3", "Async Rust server"],
+            [".feature-card:nth-child(2) h3", "TTL and recent-access cache"],
+            [".feature-card:nth-child(3) h3", "Protected admin API"],
+            ["#api .section-heading .eyebrow", "API"],
+            ["#api-title", "Four endpoints from creation to stats"],
+            [".endpoint-card:nth-child(1) .endpoint-auth", "Auth required"],
+            [".endpoint-card:nth-child(1) .code-title span:nth-child(2)", "Create link"],
+            [".endpoint-card:nth-child(2) .endpoint-auth", "No auth"],
+            [".endpoint-card:nth-child(2) .code-title span:nth-child(2)", "Redirect"],
+            [".endpoint-card:nth-child(3) .endpoint-auth", "Auth required"],
+            [".endpoint-card:nth-child(3) .code-title span:nth-child(2)", "Delete link"],
+            [".endpoint-card:nth-child(4) .endpoint-auth", "Auth required"],
+            [".endpoint-card:nth-child(4) .code-title span:nth-child(2)", "View stats"],
+            ["#install .eyebrow", "Install"],
+            ["#install-title", "Run immediately with Docker Compose"],
+            [".step-card:nth-child(1) h3", "Prepare environment file"],
+            [".step-card:nth-child(2) h3", "Start the stack"],
+            [".copy-label", "Copy"],
+            [".footer span:first-child", "rlnk - Small, fast Rust URL shortener API"],
+          ].forEach(([selector, text]) => setText(selector, text));
+
+          setButtonLabel(".hero .button.primary", "Run with Docker Compose");
+          setButtonLabel('.hero .button[href="#api"]', "View API");
+
+          [
+            [
+              ".hero .lead",
+              "rlnk handles short link creation, redirects, deletion, and statistics through a simple high-performance URL shortener API.",
+            ],
+            [".signal-list li:nth-child(1)", "<code>HTTP/HTTPS</code> URL validation"],
+            [".signal-list li:nth-child(2)", "<code>Authorization: Bearer APP_KEY</code>"],
+            [
+              ".signal-list li:nth-child(3)",
+              "<code>TTL</code>: <code>10m</code>, <code>24h</code>, <code>7d</code>",
+            ],
+            [
+              ".signal-list li:nth-child(4)",
+              "<code>ACCESS_CACHE_SIZE</code> default <code>1024</code>",
+            ],
+            [
+              "#features .section-heading p:last-child",
+              "Built on an async Rust HTTP server and MongoDB storage, rlnk provides explicit error handling and a small container image. The install and API flow keeps only the required steps.",
+            ],
+            [
+              ".feature-card:nth-child(1) p",
+              "An async server built on <code>axum</code> and <code>tokio</code>. MongoDB access uses async APIs, so handlers do not perform blocking I/O.",
+            ],
+            [
+              ".feature-card:nth-child(2) p",
+              "Expiration is calculated from duration strings such as <code>10m</code>, <code>24h</code>, and <code>7d</code>, while repeated lookups use a bounded cache to reduce database reads.",
+            ],
+            [
+              ".feature-card:nth-child(3) p",
+              "Link creation, deletion, and statistics endpoints are protected by the <code>Authorization: Bearer &lt;APP_KEY&gt;</code> header.",
+            ],
+            [
+              "#api .section-heading p:last-child",
+              "Custom hashes are not accepted; the server creates URL-safe hashes. Expand each item for a runnable curl example.",
+            ],
+            [
+              ".endpoint-card:nth-child(1) .endpoint-copy",
+              "Accepts an original URL and optional TTL, then returns a short URL and hash.",
+            ],
+            [
+              ".endpoint-card:nth-child(2) .endpoint-copy",
+              "Redirects to the original URL. Expired or missing hashes return 404.",
+            ],
+            [
+              ".endpoint-card:nth-child(3) .endpoint-copy",
+              "Deletes the link for the given hash. Missing hashes return 404.",
+            ],
+            [
+              ".endpoint-card:nth-child(4) .endpoint-copy",
+              "Returns the original URL, access count, and created, expiry, and last-access timestamps.",
+            ],
+            [
+              "#install .lead",
+              "Use the <code>.env</code> and <code>docker-compose.yml</code> examples as deployment references. Set <code>APP_HOSTNAME</code> to the public URL.",
+            ],
+            [
+              ".step-card:nth-child(1) p",
+              "<code>.env</code> contains only environment-specific values such as the app key and public hostname.",
+            ],
+            [
+              ".step-card:nth-child(2) p",
+              "Run <code>docker compose up -d</code> to start the rlnk container in the background.",
+            ],
+          ].forEach(([selector, html]) => setHtml(selector, html));
+
+          [
+            [".brand", "aria-label", "rlnk home"],
+            [".nav", "aria-label", "Primary sections"],
+            [".logo", "alt", "rlnk logo, small and fast Rust URL shortener API"],
+            [".actions", "aria-label", "Quick links"],
+            [".signal-list", "aria-label", "Key properties"],
+            [".endpoint-list", "aria-label", "API endpoint examples"],
+            [".endpoint-card:nth-child(1) .code-panel", "aria-label", "POST /gen curl example"],
+            [".endpoint-card:nth-child(2) .code-panel", "aria-label", "GET /{hash} curl example"],
+            [".endpoint-card:nth-child(3) .code-panel", "aria-label", "DELETE /{hash} curl example"],
+            [".endpoint-card:nth-child(4) .code-panel", "aria-label", "GET /stat curl example"],
+            [".steps", "aria-label", "Run steps"],
+            ["#install .code-stack .code-panel:nth-child(1)", "aria-label", ".env example"],
+            [
+              "#install .code-stack .code-panel:nth-child(2)",
+              "aria-label",
+              "docker-compose.yml example",
+            ],
+            [
+              '.copy-button[data-copy-target="env-example"]',
+              "aria-label",
+              "Copy .env example to clipboard",
+            ],
+            [
+              '.copy-button[data-copy-target="compose-example"]',
+              "aria-label",
+              "Copy docker-compose.yml example to clipboard",
+            ],
+          ].forEach(([selector, name, value]) => setAttribute(selector, name, value));
+        };
+
+        if (!preferredLanguage.startsWith("ko")) {
+          applyEnglishCopy();
+        }
+
+        const copyMessage =
+          document.documentElement.lang === "en"
+            ? { copied: "Copied", failed: "Failed" }
+            : { copied: "복사됨", failed: "실패" };
+
         const copyText = async (text) => {
           if (navigator.clipboard && window.isSecureContext) {
             try {
@@ -1072,10 +1263,10 @@ ACCESS_CACHE_SIZE=1024</code></pre>
             try {
               await copyText(target.textContent);
               button.dataset.state = "copied";
-              label.textContent = "복사됨";
+              label.textContent = copyMessage.copied;
             } catch (_error) {
               button.dataset.state = "failed";
-              label.textContent = "실패";
+              label.textContent = copyMessage.failed;
             } finally {
               window.setTimeout(() => {
                 button.disabled = false;
