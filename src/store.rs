@@ -35,6 +35,7 @@ pub trait LinkStore: Clone + Send + Sync + 'static {
         hash: &str,
         accessed_at: DateTime,
     ) -> Result<Option<LinkDocument>, AppError>;
+    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError>;
     async fn delete_link(&self, hash: &str) -> Result<bool, AppError>;
     async fn list_links(&self, now: DateTime) -> Result<Vec<LinkDocument>, AppError>;
 }
@@ -105,16 +106,25 @@ impl LinkStore for MongoLinkStore {
         accessed_at: DateTime,
     ) -> Result<Option<LinkDocument>, AppError> {
         let filter = active_link_filter(hash, accessed_at);
-        let update = doc! {
-            "$inc": { "access_count": 1_i64 },
-            "$set": { "last_accessed_at": accessed_at }
-        };
 
         self.collection
-            .find_one_and_update(filter, update)
+            .find_one_and_update(filter, access_update(accessed_at))
             .return_document(ReturnDocument::After)
             .await
             .map_err(AppError::Database)
+    }
+
+    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError> {
+        let result = self
+            .collection
+            .update_one(
+                active_link_filter(hash, accessed_at),
+                access_update(accessed_at),
+            )
+            .await
+            .map_err(AppError::Database)?;
+
+        Ok(result.matched_count > 0)
     }
 
     async fn delete_link(&self, hash: &str) -> Result<bool, AppError> {
@@ -194,6 +204,23 @@ impl LinkStore for MemoryLinkStore {
         Ok(Some(link.clone()))
     }
 
+    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError> {
+        let mut links = self.links.write().await;
+        let Some(link) = links.get_mut(hash) else {
+            return Ok(false);
+        };
+
+        if link.is_expired_at(accessed_at) {
+            links.remove(hash);
+            return Ok(false);
+        }
+
+        link.access_count += 1;
+        link.last_accessed_at = Some(accessed_at);
+
+        Ok(true)
+    }
+
     async fn delete_link(&self, hash: &str) -> Result<bool, AppError> {
         let removed = self.links.write().await.remove(hash);
 
@@ -239,6 +266,13 @@ fn active_link_filter(hash: &str, now: DateTime) -> mongodb::bson::Document {
             { "expires_at": Bson::Null },
             { "expires_at": { "$gt": now } }
         ]
+    }
+}
+
+fn access_update(accessed_at: DateTime) -> mongodb::bson::Document {
+    doc! {
+        "$inc": { "access_count": 1_i64 },
+        "$set": { "last_accessed_at": accessed_at }
     }
 }
 

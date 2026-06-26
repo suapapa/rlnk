@@ -104,3 +104,7 @@
 ## 13. 이미지 최적화
 
 - [x] T13-01 Docker runtime 이미지를 `scratch`로 축소. Owner: codex; Files: `Dockerfile`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: `docker build -t rlnk:scratch .` 및 `docker compose build app` 통과, 최종 이미지 `10.6MB`; `docker run --rm rlnk-app:latest`가 설정 오류까지 정상 실행됨
+
+## 14. 최근 접근 캐시
+
+- [x] T14-01 환경변수 기반 최근 접근 메모리 캐시 구현. Owner: codex; Files: `src/config.rs`, `src/http.rs`, `src/store.rs`, `src/lib.rs`, `src/cache.rs`, `tests/api.rs`, `.env.sample`, `README.md`, `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: 기본값 `ACCESS_CACHE_SIZE=1024`, `0`이면 비활성화. `cargo fmt`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 통과.

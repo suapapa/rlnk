@@ -35,6 +35,7 @@
   - `MONGO_DATABASE`: 기본값 `rlnk`
   - `MONGO_COLLECTION`: 기본값 `links`
   - `HASH_LENGTH`: 기본값은 충돌 가능성과 URL 길이를 고려해 정한다.
+  - `ACCESS_CACHE_SIZE`: 최근 접근한 링크 정보를 메모리에 보관할 최대 항목 수, 기본값 `1024`, `0`이면 비활성화
 - 설정 로딩 실패는 프로세스 시작 단계에서 명확한 오류로 종료한다.
 
 ## 4. 데이터 모델 설계
@@ -75,6 +76,7 @@
   - hash에 해당하는 문서를 조회한다.
   - 만료된 링크는 `404 Not Found`로 반환한다.
   - 접근 횟수와 마지막 접근 일자를 원자적으로 갱신한다.
+  - 최근 접근 캐시에 있는 hash는 원본 URL과 만료 시각을 메모리에서 읽고, DB에는 접근 통계 원자 업데이트만 수행한다.
   - 원본 URL로 리다이렉트한다.
 - `GET /stat`
   - `Authorization` 헤더를 검증한다.
@@ -117,6 +119,7 @@
 - 서버는 async I/O 기반으로 구현하고 blocking 작업을 핸들러 안에 두지 않는다.
 - MongoDB client는 clone 비용이 낮은 shared handle로 관리한다.
 - 접근 카운트와 마지막 접근 일자 갱신은 `$inc`, `$set` 기반 원자 업데이트를 사용한다.
+- 최근 접근 캐시는 프로세스 메모리 안에서 bounded cache로 유지하며, 삭제된 hash는 즉시 무효화한다.
 - 불필요한 `String` 복제와 중간 collection 생성을 피한다.
 - 성능 최적화는 추측으로 진행하지 않고, 필요 시 `cargo bench` 또는 release 빌드 기반 부하 테스트 결과를 보고 진행한다.
 

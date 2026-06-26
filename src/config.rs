@@ -8,6 +8,7 @@ const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_DATABASE: &str = "rlnk";
 const DEFAULT_COLLECTION: &str = "links";
 const DEFAULT_HASH_LENGTH: usize = 8;
+const DEFAULT_ACCESS_CACHE_SIZE: usize = 1024;
 
 /// Runtime configuration loaded from environment variables.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,6 +20,7 @@ pub struct AppConfig {
     pub mongo_database: String,
     pub mongo_collection: String,
     pub hash_length: NonZeroUsize,
+    pub access_cache_size: usize,
 }
 
 impl AppConfig {
@@ -52,8 +54,11 @@ impl AppConfig {
         let mongo_collection = optional(&vars, "MONGO_COLLECTION", DEFAULT_COLLECTION);
         let hash_length = match vars.get("HASH_LENGTH") {
             Some(raw) => parse_hash_length(raw)?,
-            None => NonZeroUsize::new(DEFAULT_HASH_LENGTH)
-                .expect("default hash length must be non-zero"),
+            None => default_hash_length()?,
+        };
+        let access_cache_size = match vars.get("ACCESS_CACHE_SIZE") {
+            Some(raw) => parse_access_cache_size(raw)?,
+            None => DEFAULT_ACCESS_CACHE_SIZE,
         };
 
         Ok(Self {
@@ -64,6 +69,7 @@ impl AppConfig {
             mongo_database,
             mongo_collection,
             hash_length,
+            access_cache_size,
         })
     }
 }
@@ -127,6 +133,21 @@ fn parse_hash_length(raw: &str) -> Result<NonZeroUsize, ConfigError> {
     })
 }
 
+fn default_hash_length() -> Result<NonZeroUsize, ConfigError> {
+    NonZeroUsize::new(DEFAULT_HASH_LENGTH).ok_or(ConfigError::InvalidEnvironment {
+        name: "HASH_LENGTH",
+        reason: "default must be greater than zero".to_owned(),
+    })
+}
+
+fn parse_access_cache_size(raw: &str) -> Result<usize, ConfigError> {
+    raw.parse::<usize>()
+        .map_err(|source| ConfigError::InvalidEnvironment {
+            name: "ACCESS_CACHE_SIZE",
+            reason: source.to_string(),
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::AppConfig;
@@ -146,6 +167,20 @@ mod tests {
         assert_eq!(config.mongo_database, "rlnk");
         assert_eq!(config.mongo_collection, "links");
         assert_eq!(config.hash_length.get(), 8);
+        assert_eq!(config.access_cache_size, 1024);
+    }
+
+    #[test]
+    fn from_pairs_should_allow_disabling_access_cache() {
+        let config = AppConfig::from_pairs([
+            ("MONGO_URI", "mongodb://localhost:27017"),
+            ("APP_KEY", "secret"),
+            ("APP_HOSTNAME", "https://rlnk.test"),
+            ("ACCESS_CACHE_SIZE", "0"),
+        ])
+        .expect("config should load");
+
+        assert_eq!(config.access_cache_size, 0);
     }
 
     #[test]

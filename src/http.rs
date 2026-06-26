@@ -14,6 +14,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
     auth::authorize,
+    cache::AccessCache,
     config::AppConfig,
     error::AppError,
     hash::HashGenerator,
@@ -29,16 +30,19 @@ pub struct AppState<R> {
     config: Arc<AppConfig>,
     store: R,
     hash_generator: HashGenerator,
+    access_cache: AccessCache,
 }
 
 impl<R> AppState<R> {
     pub fn new(config: Arc<AppConfig>, store: R) -> Self {
         let hash_generator = HashGenerator::new(config.hash_length);
+        let access_cache = AccessCache::new(config.access_cache_size);
 
         Self {
             config,
             store,
             hash_generator,
+            access_cache,
         }
     }
 }
@@ -99,6 +103,7 @@ where
     authorize(&headers, &state.config.app_key)?;
 
     let deleted = state.store.delete_link(&hash).await?;
+    state.access_cache.invalidate(&hash).await;
     if deleted {
         Ok(StatusCode::NO_CONTENT)
     } else {
@@ -114,10 +119,20 @@ where
     R: LinkStore,
 {
     let accessed_at = DateTime::now();
+    if let Some(cached) = state.access_cache.get(&hash, accessed_at).await {
+        if state.store.record_access(&hash, accessed_at).await? {
+            return Ok(Redirect::temporary(&cached.original_url));
+        }
+
+        state.access_cache.invalidate(&hash).await;
+        return Err(AppError::NotFound);
+    }
+
     let Some(link) = state.store.touch_link(&hash, accessed_at).await? else {
         return Err(AppError::NotFound);
     };
 
+    state.access_cache.remember(&link).await;
     Ok(Redirect::temporary(&link.original_url))
 }
 

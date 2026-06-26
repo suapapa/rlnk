@@ -18,16 +18,32 @@ const TEST_APP_KEY: &str = "test-key";
 const TEST_AUTHORIZATION: &str = "Bearer test-key";
 
 fn test_app() -> Router {
+    test_app_with_cache_size("1024")
+}
+
+fn test_app_with_cache_size(access_cache_size: &str) -> Router {
     let config = Arc::new(
         AppConfig::from_pairs([
             ("MONGO_URI", "mongodb://localhost:27017"),
             ("APP_KEY", TEST_APP_KEY),
             ("APP_HOSTNAME", "https://rlnk.test"),
+            ("ACCESS_CACHE_SIZE", access_cache_size),
         ])
         .expect("test config should load"),
     );
 
     app(AppState::new(config, MemoryLinkStore::new()))
+}
+
+async fn create_link(app: &Router, body: &'static str) -> CreateLinkResponse {
+    let create_response = app
+        .clone()
+        .oneshot(authed_request("POST", "/gen", Body::from(body)))
+        .await
+        .expect("create request should complete");
+    assert_eq!(create_response.status(), StatusCode::OK);
+
+    read_json(create_response).await
 }
 
 fn authed_request(method: &str, uri: &str, body: Body) -> Request<Body> {
@@ -89,17 +105,7 @@ async fn post_gen_should_reject_missing_authorization_header() {
 async fn get_hash_should_redirect_and_update_stats_after_link_is_created() {
     let app = test_app();
 
-    let create_response = app
-        .clone()
-        .oneshot(authed_request(
-            "POST",
-            "/gen",
-            Body::from(r#"{"url":"https://example.com/path","ttl":"10m"}"#),
-        ))
-        .await
-        .expect("create request should complete");
-    assert_eq!(create_response.status(), StatusCode::OK);
-    let created_link: CreateLinkResponse = read_json(create_response).await;
+    let created_link = create_link(&app, r#"{"url":"https://example.com/path","ttl":"10m"}"#).await;
 
     let redirect_response = app
         .clone()
@@ -134,19 +140,82 @@ async fn get_hash_should_redirect_and_update_stats_after_link_is_created() {
 }
 
 #[tokio::test]
+async fn get_hash_should_update_stats_when_recent_access_cache_hits() {
+    let app = test_app_with_cache_size("1");
+    let created_link = create_link(&app, r#"{"url":"https://example.com/cached"}"#).await;
+
+    for _ in 0..2 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/{}", created_link.hash))
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("redirect request should complete");
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+    }
+
+    let stats_response = app
+        .oneshot(authed_request("GET", "/stat", Body::empty()))
+        .await
+        .expect("stats request should complete");
+    let stats: Vec<LinkStatsResponse> = read_json(stats_response).await;
+
+    assert_eq!(stats[0].access_count, 2);
+}
+
+#[tokio::test]
 async fn delete_hash_should_remove_link_and_make_follow_up_lookup_fail() {
     let app = test_app();
 
-    let create_response = app
+    let created_link = create_link(&app, r#"{"url":"https://example.com/delete-me"}"#).await;
+
+    let delete_response = app
         .clone()
         .oneshot(authed_request(
-            "POST",
-            "/gen",
-            Body::from(r#"{"url":"https://example.com/delete-me"}"#),
+            "DELETE",
+            &format!("/{}", created_link.hash),
+            Body::empty(),
         ))
         .await
-        .expect("create request should complete");
-    let created_link: CreateLinkResponse = read_json(create_response).await;
+        .expect("delete request should complete");
+    assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+    let lookup_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/{}", created_link.hash))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("lookup request should complete");
+
+    assert_eq!(lookup_response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_hash_should_invalidate_recent_access_cache() {
+    let app = test_app_with_cache_size("1");
+    let created_link = create_link(&app, r#"{"url":"https://example.com/delete-cached"}"#).await;
+
+    let warm_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/{}", created_link.hash))
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("warm request should complete");
+    assert_eq!(warm_response.status(), StatusCode::TEMPORARY_REDIRECT);
 
     let delete_response = app
         .clone()

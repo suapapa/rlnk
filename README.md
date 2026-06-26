@@ -22,6 +22,7 @@ The application reads the following environment variables:
 - `MONGO_DATABASE`: optional database name, defaults to `rlnk`
 - `MONGO_COLLECTION`: optional collection name, defaults to `links`
 - `HASH_LENGTH`: optional generated hash length, defaults to `8`
+- `ACCESS_CACHE_SIZE`: optional number of recently accessed links cached in memory, defaults to `1024`; use `0` to disable
 
 ## Local run
 
