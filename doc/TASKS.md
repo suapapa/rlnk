@@ -100,3 +100,7 @@
 - [x] T12-01 `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md` 내용이 구현과 일치하는지 확인. Owner: codex; Files: `doc/*.md`
 - [x] T12-02 실제 실행으로 URL 생성, 리다이렉트, 삭제, 통계 조회 smoke test 수행. Owner: codex; Files: 전체; Note: `docker compose up -d --build` 후 `POST /gen`, `GET /{hash}`, `GET /stat`, `DELETE /{hash}`, 삭제 후 재조회 `404` 확인
 - [x] T12-03 남은 `Owner`와 `blocked` 항목 정리. Owner: codex; Files: `doc/TASKS.md`
+
+## 13. 이미지 최적화
+
+- [x] T13-01 Docker runtime 이미지를 `scratch`로 축소. Owner: codex; Files: `Dockerfile`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: `docker build -t rlnk:scratch .` 및 `docker compose build app` 통과, 최종 이미지 `10.6MB`; `docker run --rm rlnk-app:latest`가 설정 오류까지 정상 실행됨

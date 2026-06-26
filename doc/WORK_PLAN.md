@@ -131,8 +131,9 @@
 ## 12. Docker와 실행 문서
 
 - multi-stage `Dockerfile`을 작성한다.
-  - builder stage에서 release binary를 빌드한다.
-  - runtime stage에는 실행에 필요한 최소 파일만 포함한다.
+  - builder stage는 Alpine 기반 Rust 이미지에서 musl release binary를 빌드한다.
+  - runtime stage는 `scratch`를 사용하고 실행 바이너리와 CA 번들만 포함한다.
+  - 컨테이너는 숫자 UID/GID 기반 non-root 사용자로 실행한다.
 - `.dockerignore`를 작성한다.
 - Docker Compose 기반 로컬 실행 구성을 작성한다.
 - `.env.sample`을 작성한다.
