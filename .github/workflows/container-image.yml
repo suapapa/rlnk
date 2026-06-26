@@ -41,7 +41,7 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           flavor: |
-            latest=false
+            latest=auto
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
