@@ -1,5 +1,9 @@
 # rlnk
 
+<p align="center">
+  <img src="assets/rlnk-logo.svg" alt="rlnk logo" width="640">
+</p>
+
 MongoDB backed URL shortener written in Rust.
 
 ## Requirements
