@@ -19,8 +19,8 @@
 - HTTP 서버는 `axum`과 `tokio`를 사용한다.
 - MongoDB 접근은 공식 `mongodb` crate를 사용한다.
 - 직렬화와 역직렬화는 `serde`를 사용한다.
-- 시간 처리는 TTL과 마지막 접근 일자 표현을 위해 `chrono` 또는 `time` 중 하나를 선택한다. MongoDB BSON 연동성을 우선해 최종 선택한다. <- 알아서 골라
-- 환경변수 로딩은 운영 환경에서는 직접 환경변수를 읽고, 로컬 개발 편의를 위해 `dotenvy` 사용 여부를 검토한다. <- dotenvy 불필요. .env 환경은 docker-compose 의 지원기능으로 커버. .env.sample 생성할 것.
+- 시간 처리는 MongoDB BSON `DateTime`과 `humantime`을 사용한다. TTL 파싱은 duration 문자열을 `std::time::Duration`으로 해석하고, 응답 시각은 RFC3339 문자열로 반환한다.
+- 환경변수 로딩은 애플리케이션에서 직접 `std::env`를 읽는다. `.env` 로딩은 애플리케이션에서 처리하지 않고 Docker Compose의 `env_file`로 커버한다. `.env.sample`을 제공한다.
 - 오류 모델링은 `thiserror` 기반의 명시적 오류 enum을 사용한다.
 - 요청 추적과 운영 로그는 `tracing`과 `tracing-subscriber`를 사용한다.
 
@@ -73,11 +73,12 @@
   - 존재하지 않는 hash는 `404 Not Found`로 반환한다.
 - `GET /{hash}`
   - hash에 해당하는 문서를 조회한다.
-  - 만료된 링크는 `404 Not Found` 또는 `410 Gone` 중 하나로 정책을 확정해 반환한다. -> 404
+  - 만료된 링크는 `404 Not Found`로 반환한다.
   - 접근 횟수와 마지막 접근 일자를 원자적으로 갱신한다.
   - 원본 URL로 리다이렉트한다.
 - `GET /stat`
-  - 생성된 링크들의 원본 링크, 접근 횟수, 마지막 접근 일자를 반환한다.
+  - `Authorization` 헤더를 검증한다.
+  - 생성된 링크들의 hash, short URL, 원본 링크, 접근 횟수, 생성 시각, 만료 시각, 마지막 접근 일자를 반환한다.
   - 초기 버전은 전체 목록을 반환하되, 데이터가 늘어나는 상황을 고려해 pagination 추가 지점을 남긴다.
 
 ## 7. 인증 정책
@@ -108,7 +109,7 @@
   - `GET /{hash}` 리다이렉트와 접근 카운트 증가
   - `DELETE /{hash}` 삭제 후 조회 실패
   - `GET /stat` 응답 구조
-- MongoDB가 필요한 테스트는 `testcontainers` 도입을 검토한다.
+- HTTP 통합 테스트는 `MemoryLinkStore` 기반으로 수행하고, 실제 MongoDB 연동 검증은 별도 smoke test로 남긴다.
 - 테스트 이름은 동작과 조건을 문장처럼 드러내고, 가능한 한 테스트 하나가 하나의 행동만 검증하게 한다.
 
 ## 10. 성능과 동시성 기준
@@ -133,6 +134,8 @@
   - builder stage에서 release binary를 빌드한다.
   - runtime stage에는 실행에 필요한 최소 파일만 포함한다.
 - `.dockerignore`를 작성한다.
+- Docker Compose 기반 로컬 실행 구성을 작성한다.
+- `.env.sample`을 작성한다.
 - 로컬 실행 예시를 `README.md`에 추가한다.
   - 환경변수 예시
   - MongoDB 실행 방법
@@ -151,12 +154,12 @@
 8. `DELETE /{hash}`를 구현한다.
 9. `GET /stat`를 구현한다.
 10. 통합 테스트를 추가한다.
-11. Dockerfile과 README를 작성한다.
+11. Dockerfile, Docker Compose, `.env.sample`, README를 작성한다.
 12. `fmt`, `clippy`, `test`, release build를 실행해 마무리 검증한다.
 
 ## 14. 미정 사항
 
-- TTL 입력 단위는 seconds, RFC3339 만료 시각, duration 문자열 중 하나로 확정해야 한다. -> duration 문자열
-- `GET /stat` 인증 여부는 현재 기획에 없으므로 공개 API로 둘지, 운영 정보 보호를 위해 인증을 추가할지 결정해야 한다. -> 같은 키를 사용해 인증
-- 만료된 링크 조회 시 `404 Not Found`와 `410 Gone` 중 어느 상태 코드를 사용할지 결정해야 한다. -> 404
-- 생성 요청에서 사용자 지정 hash를 허용할지 여부를 결정해야 한다. -> 불허
+- TTL 입력은 duration 문자열로 확정했다.
+- `GET /stat`는 같은 `APP_KEY` 기반 인증을 적용하기로 확정했다.
+- 만료된 링크 조회는 `404 Not Found`로 확정했다.
+- 생성 요청에서 사용자 지정 hash는 허용하지 않기로 확정했다.
