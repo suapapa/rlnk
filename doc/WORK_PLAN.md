@@ -140,6 +140,7 @@
 - `.dockerignore`를 작성한다.
 - Docker Compose 기반 로컬 실행 구성을 작성한다.
 - `.env.sample`을 작성한다.
+- 컨테이너 이미지 게시 워크플로는 `v*` 태그 push에서만 실행한다.
 - 로컬 실행 예시를 `README.md`에 추가한다.
   - 환경변수 예시
   - MongoDB 실행 방법
@@ -159,7 +160,8 @@
 9. `GET /stat`를 구현한다.
 10. 통합 테스트를 추가한다.
 11. Dockerfile, Docker Compose, `.env.sample`, README를 작성한다.
-12. `fmt`, `clippy`, `test`, release build를 실행해 마무리 검증한다.
+12. 릴리스 태그에서만 도커 이미지를 빌드하도록 CI 워크플로를 관리한다.
+13. `fmt`, `clippy`, `test`, release build를 실행해 마무리 검증한다.
 
 ## 14. 미정 사항
 

@@ -108,3 +108,7 @@
 ## 14. 최근 접근 캐시
 
 - [x] T14-01 환경변수 기반 최근 접근 메모리 캐시 구현. Owner: codex; Files: `src/config.rs`, `src/http.rs`, `src/store.rs`, `src/lib.rs`, `src/cache.rs`, `tests/api.rs`, `.env.sample`, `README.md`, `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: 기본값 `ACCESS_CACHE_SIZE=1024`, `0`이면 비활성화. `cargo fmt`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 통과.
+
+## 15. 릴리스 버전과 이미지 게시
+
+- [x] T15-01 `v0.2.0` 릴리스 준비와 태그 전용 이미지 빌드 설정. Owner: codex; Files: `Cargo.toml`, `Cargo.lock`, `.github/workflows/container-image.yml`, `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: Cargo 패키지 버전 `0.2.0`, 이미지 워크플로는 `v*` 태그 push에서만 실행. `cargo fmt`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 통과.

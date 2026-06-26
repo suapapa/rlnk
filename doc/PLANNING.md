@@ -15,6 +15,7 @@ Rust로 작성된 초소형 고성능 URL shortener 앱.
 - `POST /gen`, `DELETE /{hash}`, `GET /stat`는 `Authorization` 헤더로 보안 강화
   - `Authorization: Bearer <APP_KEY>` 형식으로 인증한다.
 - Dockerfile 필요
+- 도커 이미지는 `v*` 태그가 발행될 때만 CI에서 빌드하고 게시한다.
 - Docker Compose 기반 로컬 실행을 지원하고, `.env.sample`을 제공한다.
 - 환경변수로 `MONGO_URI`, `APP_KEY`, `APP_HOSTNAME` 등을 받는다.
   - `APP_HOSTNAME`은 생성한 hash에 붙여 short URL로 반환한다.
