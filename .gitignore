@@ -1,0 +1,39 @@
+# Cargo build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Coverage and profiling output
+/coverage/
+/llvm-cov-target/
+/tarpaulin-report.html
+/cobertura.xml
+/lcov.info
+*.profraw
+perf.data
+perf.data.old
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.direnv/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.agents/
+skills-lock.json
