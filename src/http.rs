@@ -13,6 +13,7 @@ use serde::Serialize;
 use tower_http::trace::TraceLayer;
 
 use crate::{
+    access_buffer::AccessBuffer,
     auth::authorize,
     cache::AccessCache,
     config::AppConfig,
@@ -36,13 +37,18 @@ pub struct AppState<R> {
     store: R,
     hash_generator: HashGenerator,
     access_cache: AccessCache,
+    access_buffer: AccessBuffer,
     metrics: Arc<AppMetrics>,
 }
 
-impl<R> AppState<R> {
+impl<R> AppState<R>
+where
+    R: LinkStore,
+{
     pub fn new(config: Arc<AppConfig>, store: R) -> Self {
         let hash_generator = HashGenerator::new(config.hash_length);
         let access_cache = AccessCache::new(config.access_cache_size);
+        let access_buffer = AccessBuffer::new();
         let metrics = Arc::new(AppMetrics::default());
 
         Self {
@@ -50,12 +56,25 @@ impl<R> AppState<R> {
             store,
             hash_generator,
             access_cache,
+            access_buffer,
             metrics,
         }
     }
 
     pub fn metrics(&self) -> &Arc<AppMetrics> {
         &self.metrics
+    }
+
+    pub fn config(&self) -> &AppConfig {
+        &self.config
+    }
+
+    pub fn store(&self) -> &R {
+        &self.store
+    }
+
+    pub fn access_buffer(&self) -> &AccessBuffer {
+        &self.access_buffer
     }
 }
 
@@ -188,8 +207,9 @@ where
 {
     authorize(&headers, &state.config.app_key)?;
 
+    state.access_buffer.discard(&hash);
+    state.access_cache.invalidate(&hash);
     let deleted = state.store.delete_link(&hash).await?;
-    state.access_cache.invalidate(&hash).await;
     if deleted {
         state
             .metrics
@@ -209,36 +229,33 @@ where
     R: LinkStore,
 {
     let accessed_at = DateTime::now();
-    if let Some(cached) = state.access_cache.get(&hash, accessed_at).await {
+    if let Some(cached) = state.access_cache.get(&hash, accessed_at) {
         state
             .metrics
             .cache_hits_total
             .fetch_add(1, Ordering::Relaxed);
-        if state.store.record_access(&hash, accessed_at).await? {
-            state
-                .metrics
-                .redirects_total
-                .fetch_add(1, Ordering::Relaxed);
-            return Ok(Redirect::temporary(&cached.original_url));
-        }
-
-        state.access_cache.invalidate(&hash).await;
-        return Err(AppError::NotFound);
+        state.access_buffer.record(hash, accessed_at);
+        state
+            .metrics
+            .redirects_total
+            .fetch_add(1, Ordering::Relaxed);
+        return Ok(Redirect::temporary(&cached.original_url));
     }
 
     state
         .metrics
         .cache_misses_total
         .fetch_add(1, Ordering::Relaxed);
-    let Some(link) = state.store.touch_link(&hash, accessed_at).await? else {
+    let Some(link) = state.store.get_active_link(&hash, accessed_at).await? else {
         return Err(AppError::NotFound);
     };
 
+    state.access_buffer.record(link.hash.clone(), accessed_at);
+    state.access_cache.remember(&link);
     state
         .metrics
         .redirects_total
         .fetch_add(1, Ordering::Relaxed);
-    state.access_cache.remember(&link).await;
     Ok(Redirect::temporary(&link.original_url))
 }
 
@@ -251,6 +268,8 @@ where
     R: LinkStore,
 {
     authorize(&headers, &state.config.app_key)?;
+
+    state.access_buffer.flush(&state.store).await?;
 
     let limit = params.normalized_limit();
     let offset = params.offset;

@@ -1,5 +1,6 @@
 //! rlnk is a compact URL shortener service backed by MongoDB.
 
+pub mod access_buffer;
 pub mod auth;
 pub mod cache;
 pub mod config;

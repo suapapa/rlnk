@@ -122,4 +122,10 @@
 - [x] T16-05 신규 엔드포인트 및 페이징 단위/통합 테스트 추가. Owner: antigravity; Files: `src/model.rs`, `src/metrics.rs`, `tests/api.rs`; Note: 23개 단위 테스트, 12개 통합 테스트 전체 통과
 - [x] T16-06 README 문서 갱신 및 전체 품질 검증(fmt, clippy, test, build). Owner: antigravity; Files: `README.md`, `doc/TASKS.md`; Note: `cargo fmt --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 모두 통과
 
+## 17. 성능·고가용성 (핫패스 / 운영)
+
+- [x] T17-01 접근 통계 write-behind와 moka 캐시, Mongo pool 설정. Owner: cursor-agent; Files: `src/access_buffer.rs`, `src/cache.rs`, `src/config.rs`, `src/store.rs`, `src/http.rs`, `src/main.rs`, `src/lib.rs`, `Cargo.toml`, `tests/api.rs`; Note: cache hit 경로에서 Mongo await 제거, `ACCESS_STATS_FLUSH_INTERVAL_MS` 및 Mongo pool/timeout 설정 추가
+- [x] T17-02 Compose 다중 앱 + 로드밸런서, 부하 테스트 스크립트. Owner: cursor-agent; Files: `docker-compose.yml`, `deploy/nginx.conf`, `scripts/loadtest.sh`, `.env.sample`, `README.md`; Note: app1/app2 + nginx least_conn
+- [x] T17-03 PLANNING/WORK_PLAN 반영 및 품질 검증. Owner: cursor-agent; Files: `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: `cargo fmt`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 통과
+
 

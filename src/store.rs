@@ -5,10 +5,10 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
 use mongodb::{
-    Collection, IndexModel,
+    Client, Collection, IndexModel,
     bson::{Bson, DateTime, doc},
     error::{ErrorKind, WriteFailure},
-    options::{IndexOptions, ReturnDocument},
+    options::{ClientOptions, IndexOptions},
 };
 use tokio::sync::RwLock;
 
@@ -31,12 +31,17 @@ pub trait LinkStore: Clone + Send + Sync + 'static {
         new_link: &NewLink,
         created_at: DateTime,
     ) -> Result<LinkDocument, AppError>;
-    async fn touch_link(
+    async fn get_active_link(
         &self,
         hash: &str,
-        accessed_at: DateTime,
+        now: DateTime,
     ) -> Result<Option<LinkDocument>, AppError>;
-    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError>;
+    async fn apply_access(
+        &self,
+        hash: &str,
+        access_count: u64,
+        accessed_at: DateTime,
+    ) -> Result<bool, AppError>;
     async fn delete_link(&self, hash: &str) -> Result<bool, AppError>;
     async fn list_links(
         &self,
@@ -55,7 +60,18 @@ pub struct MongoLinkStore {
 
 impl MongoLinkStore {
     pub async fn connect(config: &AppConfig) -> Result<Self, mongodb::error::Error> {
-        let client = mongodb::Client::with_uri_str(&config.mongo_uri).await?;
+        let mut options = ClientOptions::parse(&config.mongo_uri).await?;
+        if let Some(max_pool_size) = config.mongo_max_pool_size {
+            options.max_pool_size = Some(max_pool_size);
+        }
+        if let Some(connect_timeout) = config.mongo_connect_timeout {
+            options.connect_timeout = Some(connect_timeout);
+        }
+        if let Some(server_selection_timeout) = config.mongo_server_selection_timeout {
+            options.server_selection_timeout = Some(server_selection_timeout);
+        }
+
+        let client = Client::with_options(options)?;
         let database = client.database(&config.mongo_database);
         let collection = database.collection::<LinkDocument>(&config.mongo_collection);
 
@@ -118,26 +134,32 @@ impl LinkStore for MongoLinkStore {
         }
     }
 
-    async fn touch_link(
+    async fn get_active_link(
         &self,
         hash: &str,
-        accessed_at: DateTime,
+        now: DateTime,
     ) -> Result<Option<LinkDocument>, AppError> {
-        let filter = active_link_filter(hash, accessed_at);
-
         self.collection
-            .find_one_and_update(filter, access_update(accessed_at))
-            .return_document(ReturnDocument::After)
+            .find_one(active_link_filter(hash, now))
             .await
             .map_err(AppError::Database)
     }
 
-    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError> {
+    async fn apply_access(
+        &self,
+        hash: &str,
+        access_count: u64,
+        accessed_at: DateTime,
+    ) -> Result<bool, AppError> {
+        if access_count == 0 {
+            return Ok(false);
+        }
+
         let result = self
             .collection
             .update_one(
                 active_link_filter(hash, accessed_at),
-                access_update(accessed_at),
+                access_update(access_count, accessed_at),
             )
             .await
             .map_err(AppError::Database)?;
@@ -222,28 +244,34 @@ impl LinkStore for MemoryLinkStore {
         Ok(document)
     }
 
-    async fn touch_link(
+    async fn get_active_link(
         &self,
         hash: &str,
-        accessed_at: DateTime,
+        now: DateTime,
     ) -> Result<Option<LinkDocument>, AppError> {
         let mut links = self.links.write().await;
-        let Some(link) = links.get_mut(hash) else {
+        let Some(link) = links.get(hash) else {
             return Ok(None);
         };
 
-        if link.is_expired_at(accessed_at) {
+        if link.is_expired_at(now) {
             links.remove(hash);
             return Ok(None);
         }
-
-        link.access_count += 1;
-        link.last_accessed_at = Some(accessed_at);
 
         Ok(Some(link.clone()))
     }
 
-    async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError> {
+    async fn apply_access(
+        &self,
+        hash: &str,
+        access_count: u64,
+        accessed_at: DateTime,
+    ) -> Result<bool, AppError> {
+        if access_count == 0 {
+            return Ok(false);
+        }
+
         let mut links = self.links.write().await;
         let Some(link) = links.get_mut(hash) else {
             return Ok(false);
@@ -254,7 +282,7 @@ impl LinkStore for MemoryLinkStore {
             return Ok(false);
         }
 
-        link.access_count += 1;
+        link.access_count = link.access_count.saturating_add(access_count);
         link.last_accessed_at = Some(accessed_at);
 
         Ok(true)
@@ -322,9 +350,9 @@ fn active_link_filter(hash: &str, now: DateTime) -> mongodb::bson::Document {
     }
 }
 
-fn access_update(accessed_at: DateTime) -> mongodb::bson::Document {
+fn access_update(access_count: u64, accessed_at: DateTime) -> mongodb::bson::Document {
     doc! {
-        "$inc": { "access_count": 1_i64 },
+        "$inc": { "access_count": access_count as i64 },
         "$set": { "last_accessed_at": accessed_at }
     }
 }

@@ -11,6 +11,7 @@ Rust로 작성된 초소형 고성능 URL shortener 앱.
 - `GET /{hash}`: 생성된 URL로 리다이렉트
   - 존재하지 않거나 만료된 hash는 `404 Not Found`로 반환한다.
   - 최근 접근한 hash의 원본 URL과 만료 시각은 메모리에 캐시해서 반복 접근 시 DB에서 문서를 다시 읽지 않도록 한다.
+  - 접근 횟수/마지막 접근 일자는 write-behind로 버퍼링한 뒤 주기적으로 MongoDB에 flush한다. `GET /stat` 직전에 flush해서 관리 API는 최신 통계를 본다.
 - `GET /stat`: 생성된 링크들의 원본 링크, 접근 횟수, 마지막 접근 일자 반환
   - 선택 쿼리 파라미터로 `limit`(기본값 50, 최대 1000)과 `offset`(기본값 0)을 지원한다.
   - `{ items: [...], total, limit, offset }` 페이징 봉투 형식으로 반환한다.
@@ -25,4 +26,7 @@ Rust로 작성된 초소형 고성능 URL shortener 앱.
 - 환경변수로 `MONGO_URI`, `APP_KEY`, `APP_HOSTNAME` 등을 받는다.
   - `APP_HOSTNAME`은 생성한 hash에 붙여 short URL로 반환한다.
   - `ACCESS_CACHE_SIZE`는 최근 접근 캐시에 보관할 최대 항목 수이며, 기본값은 `1024`이다. `0`이면 캐시를 비활성화한다.
+  - `ACCESS_STATS_FLUSH_INTERVAL_MS`는 접근 통계 write-behind flush 주기(밀리초)이며, 기본값은 `1000`이다.
+  - `MONGO_MAX_POOL_SIZE`, `MONGO_CONNECT_TIMEOUT_MS`, `MONGO_SERVER_SELECTION_TIMEOUT_MS`는 선택적 MongoDB 클라이언트 튜닝 값이다.
+- 로컬 Compose는 앱 인스턴스 2개와 nginx 로드밸런서로 수평 확장을 지원한다.
 

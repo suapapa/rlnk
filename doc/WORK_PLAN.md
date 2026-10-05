@@ -36,6 +36,8 @@
   - `MONGO_COLLECTION`: 기본값 `links`
   - `HASH_LENGTH`: 기본값은 충돌 가능성과 URL 길이를 고려해 정한다.
   - `ACCESS_CACHE_SIZE`: 최근 접근한 링크 정보를 메모리에 보관할 최대 항목 수, 기본값 `1024`, `0`이면 비활성화
+  - `ACCESS_STATS_FLUSH_INTERVAL_MS`: 접근 통계 flush 주기(ms), 기본값 `1000`
+  - `MONGO_MAX_POOL_SIZE`, `MONGO_CONNECT_TIMEOUT_MS`, `MONGO_SERVER_SELECTION_TIMEOUT_MS`: 선택적 Mongo 클라이언트 튜닝
 - 설정 로딩 실패는 프로세스 시작 단계에서 명확한 오류로 종료한다.
 
 ## 4. 데이터 모델 설계
@@ -75,8 +77,9 @@
 - `GET /{hash}`
   - hash에 해당하는 문서를 조회한다.
   - 만료된 링크는 `404 Not Found`로 반환한다.
-  - 접근 횟수와 마지막 접근 일자를 원자적으로 갱신한다.
-  - 최근 접근 캐시에 있는 hash는 원본 URL과 만료 시각을 메모리에서 읽고, DB에는 접근 통계 원자 업데이트만 수행한다.
+  - 최근 접근 캐시에 있는 hash는 원본 URL과 만료 시각을 메모리에서 읽고 즉시 리다이렉트한다.
+  - 접근 통계는 인메모리 버퍼에 기록하고 백그라운드에서 MongoDB로 batch flush한다.
+  - 캐시 미스 시 active 문서를 조회한 뒤 캐시에 넣고 리다이렉트한다.
   - 원본 URL로 리다이렉트한다.
 - `GET /stat`
   - `Authorization` 헤더를 검증한다.
@@ -126,10 +129,18 @@
 
 - 서버는 async I/O 기반으로 구현하고 blocking 작업을 핸들러 안에 두지 않는다.
 - MongoDB client는 clone 비용이 낮은 shared handle로 관리한다.
-- 접근 카운트와 마지막 접근 일자 갱신은 `$inc`, `$set` 기반 원자 업데이트를 사용한다.
-- 최근 접근 캐시는 프로세스 메모리 안에서 bounded cache로 유지하며, 삭제된 hash는 즉시 무효화한다.
+- 접근 카운트와 마지막 접근 일자 갱신은 write-behind 버퍼 후 `$inc`, `$set` 기반 원자 업데이트로 flush한다.
+- 최근 접근 캐시는 `moka` bounded cache로 유지하며, 삭제된 hash는 즉시 무효화한다.
+- 캐시 hit 리다이렉트 경로에서는 MongoDB를 await하지 않는다.
 - 불필요한 `String` 복제와 중간 collection 생성을 피한다.
-- 성능 최적화는 추측으로 진행하지 않고, 필요 시 `cargo bench` 또는 release 빌드 기반 부하 테스트 결과를 보고 진행한다.
+- 성능 최적화는 추측으로 진행하지 않고, `scripts/loadtest.sh` 또는 release 빌드 기반 부하 테스트 결과를 보고 진행한다.
+
+## 17. 성능·고가용성 확장
+
+- 접근 통계 write-behind와 graceful shutdown 시 final flush.
+- MongoDB pool/timeout 환경변수 노출.
+- Docker Compose에서 app 레플리카 2 + nginx least_conn 로드밸런싱.
+- 부하 테스트 스크립트(`scripts/loadtest.sh`) 제공.
 
 ## 11. 품질 도구와 CI 기준
 

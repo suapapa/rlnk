@@ -23,6 +23,12 @@ The application reads the following environment variables:
 - `MONGO_COLLECTION`: optional collection name, defaults to `links`
 - `HASH_LENGTH`: optional generated hash length, defaults to `8`
 - `ACCESS_CACHE_SIZE`: optional number of recently accessed links cached in memory, defaults to `1024`; use `0` to disable
+- `ACCESS_STATS_FLUSH_INTERVAL_MS`: how often buffered redirect stats are flushed to MongoDB, defaults to `1000`
+- `MONGO_MAX_POOL_SIZE`: optional MongoDB client max pool size
+- `MONGO_CONNECT_TIMEOUT_MS`: optional MongoDB connect timeout in milliseconds
+- `MONGO_SERVER_SELECTION_TIMEOUT_MS`: optional MongoDB server selection timeout in milliseconds
+
+Redirect access counts are write-behind: `GET /{hash}` records hits in memory and flushes them on an interval (and before `GET /stat`). Stats may lag by up to one flush interval.
 
 ## Local run
 
@@ -37,11 +43,19 @@ cargo run
 
 ## Docker Compose
 
-Create a local `.env` file from `.env.sample`, then start the stack:
+Create a local `.env` file from `.env.sample`, then start the stack (two app replicas behind nginx on port `8080`):
 
 ```sh
 cp .env.sample .env
 docker compose up --build
+```
+
+## Load test
+
+With the stack running, measure redirect throughput (install [oha](https://github.com/hatoo/oha) for best results):
+
+```sh
+APP_KEY='change-me' ./scripts/loadtest.sh
 ```
 
 ## API

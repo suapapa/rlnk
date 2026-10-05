@@ -1,6 +1,6 @@
 //! Application configuration loading and validation.
 
-use std::{collections::HashMap, net::SocketAddr, num::NonZeroUsize};
+use std::{collections::HashMap, net::SocketAddr, num::NonZeroUsize, time::Duration};
 
 use crate::error::ConfigError;
 
@@ -9,6 +9,7 @@ const DEFAULT_DATABASE: &str = "rlnk";
 const DEFAULT_COLLECTION: &str = "links";
 const DEFAULT_HASH_LENGTH: usize = 8;
 const DEFAULT_ACCESS_CACHE_SIZE: usize = 1024;
+const DEFAULT_ACCESS_STATS_FLUSH_INTERVAL_MS: u64 = 1_000;
 
 /// Runtime configuration loaded from environment variables.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,6 +22,10 @@ pub struct AppConfig {
     pub mongo_collection: String,
     pub hash_length: NonZeroUsize,
     pub access_cache_size: usize,
+    pub access_stats_flush_interval: Duration,
+    pub mongo_max_pool_size: Option<u32>,
+    pub mongo_connect_timeout: Option<Duration>,
+    pub mongo_server_selection_timeout: Option<Duration>,
 }
 
 impl AppConfig {
@@ -60,6 +65,25 @@ impl AppConfig {
             Some(raw) => parse_access_cache_size(raw)?,
             None => DEFAULT_ACCESS_CACHE_SIZE,
         };
+        let access_stats_flush_interval = match vars.get("ACCESS_STATS_FLUSH_INTERVAL_MS") {
+            Some(raw) => parse_positive_duration_ms(raw, "ACCESS_STATS_FLUSH_INTERVAL_MS")?,
+            None => Duration::from_millis(DEFAULT_ACCESS_STATS_FLUSH_INTERVAL_MS),
+        };
+        let mongo_max_pool_size = match vars.get("MONGO_MAX_POOL_SIZE") {
+            Some(raw) => Some(parse_positive_u32(raw, "MONGO_MAX_POOL_SIZE")?),
+            None => None,
+        };
+        let mongo_connect_timeout = match vars.get("MONGO_CONNECT_TIMEOUT_MS") {
+            Some(raw) => Some(parse_positive_duration_ms(raw, "MONGO_CONNECT_TIMEOUT_MS")?),
+            None => None,
+        };
+        let mongo_server_selection_timeout = match vars.get("MONGO_SERVER_SELECTION_TIMEOUT_MS") {
+            Some(raw) => Some(parse_positive_duration_ms(
+                raw,
+                "MONGO_SERVER_SELECTION_TIMEOUT_MS",
+            )?),
+            None => None,
+        };
 
         Ok(Self {
             mongo_uri,
@@ -70,6 +94,10 @@ impl AppConfig {
             mongo_collection,
             hash_length,
             access_cache_size,
+            access_stats_flush_interval,
+            mongo_max_pool_size,
+            mongo_connect_timeout,
+            mongo_server_selection_timeout,
         })
     }
 }
@@ -148,8 +176,33 @@ fn parse_access_cache_size(raw: &str) -> Result<usize, ConfigError> {
         })
 }
 
+fn parse_positive_u32(raw: &str, name: &'static str) -> Result<u32, ConfigError> {
+    let parsed = raw
+        .parse::<u32>()
+        .map_err(|source| ConfigError::InvalidEnvironment {
+            name,
+            reason: source.to_string(),
+        })?;
+
+    if parsed == 0 {
+        return Err(ConfigError::InvalidEnvironment {
+            name,
+            reason: "must be greater than zero".to_owned(),
+        });
+    }
+
+    Ok(parsed)
+}
+
+fn parse_positive_duration_ms(raw: &str, name: &'static str) -> Result<Duration, ConfigError> {
+    let millis = parse_positive_u32(raw, name)?;
+    Ok(Duration::from_millis(u64::from(millis)))
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::AppConfig;
 
     fn base_env() -> Vec<(&'static str, &'static str)> {
@@ -168,6 +221,13 @@ mod tests {
         assert_eq!(config.mongo_collection, "links");
         assert_eq!(config.hash_length.get(), 8);
         assert_eq!(config.access_cache_size, 1024);
+        assert_eq!(
+            config.access_stats_flush_interval,
+            Duration::from_millis(1_000)
+        );
+        assert_eq!(config.mongo_max_pool_size, None);
+        assert_eq!(config.mongo_connect_timeout, None);
+        assert_eq!(config.mongo_server_selection_timeout, None);
     }
 
     #[test]
@@ -181,6 +241,34 @@ mod tests {
         .expect("config should load");
 
         assert_eq!(config.access_cache_size, 0);
+    }
+
+    #[test]
+    fn from_pairs_should_parse_mongo_and_flush_tuning() {
+        let config = AppConfig::from_pairs([
+            ("MONGO_URI", "mongodb://localhost:27017"),
+            ("APP_KEY", "secret"),
+            ("APP_HOSTNAME", "https://rlnk.test"),
+            ("ACCESS_STATS_FLUSH_INTERVAL_MS", "250"),
+            ("MONGO_MAX_POOL_SIZE", "32"),
+            ("MONGO_CONNECT_TIMEOUT_MS", "2000"),
+            ("MONGO_SERVER_SELECTION_TIMEOUT_MS", "3000"),
+        ])
+        .expect("config should load");
+
+        assert_eq!(
+            config.access_stats_flush_interval,
+            Duration::from_millis(250)
+        );
+        assert_eq!(config.mongo_max_pool_size, Some(32));
+        assert_eq!(
+            config.mongo_connect_timeout,
+            Some(Duration::from_millis(2000))
+        );
+        assert_eq!(
+            config.mongo_server_selection_timeout,
+            Some(Duration::from_millis(3000))
+        );
     }
 
     #[test]

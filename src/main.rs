@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::watch};
 use tracing::info;
 
 use rlnk::{
+    access_buffer::run_access_flush_loop,
     config::AppConfig,
     error::{AppError, BootstrapError},
     http::{AppState, app},
@@ -21,11 +22,29 @@ async fn main() -> Result<(), BootstrapError> {
         .await
         .map_err(bootstrap_store_error)?;
 
-    let listener = TcpListener::bind(config.bind_addr).await?;
-    info!(address = %config.bind_addr, "rlnk listening");
+    let state = AppState::new(config, store);
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let flush_store = state.store().clone();
+    let flush_buffer = state.access_buffer().clone();
+    let flush_interval = state.config().access_stats_flush_interval;
+    let flush_task = tokio::spawn(run_access_flush_loop(
+        flush_store,
+        flush_buffer,
+        flush_interval,
+        shutdown_rx,
+    ));
 
-    axum::serve(listener, app(AppState::new(config, store)))
-        .with_graceful_shutdown(shutdown_signal())
+    let listener = TcpListener::bind(state.config().bind_addr).await?;
+    info!(address = %state.config().bind_addr, "rlnk listening");
+
+    axum::serve(listener, app(state))
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            let _ = shutdown_tx.send(true);
+            if let Err(error) = flush_task.await {
+                tracing::warn!(%error, "access flush task join failed");
+            }
+        })
         .await?;
 
     Ok(())
