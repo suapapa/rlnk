@@ -112,3 +112,14 @@
 ## 15. 릴리스 버전과 이미지 게시
 
 - [x] T15-01 `v0.2.0` 릴리스 준비와 태그 전용 이미지 빌드 설정. Owner: codex; Files: `Cargo.toml`, `Cargo.lock`, `.github/workflows/container-image.yml`, `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: Cargo 패키지 버전 `0.2.0`, 이미지 워크플로는 `v*` 태그 push에서만 실행. `cargo fmt`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 통과.
+
+## 16. 백엔드 기능 확장 (헬스체크, 통계 페이징, 프로메테우스 메트릭)
+
+- [x] T16-01 백엔드 확장 계획 문서화. Owner: antigravity; Files: `doc/PLANNING.md`, `doc/WORK_PLAN.md`, `doc/TASKS.md`; Note: PLANNING, WORK_PLAN, TASKS 갱신 완료
+- [x] T16-02 LinkStore ping 구현 및 헬스/준비성 프로브(GET /healthz, GET /readyz) 구현. Owner: antigravity; Files: `src/store.rs`, `src/http.rs`; Note: MongoDB ping 및 MemoryLinkStore ping 구현, GET /healthz 및 GET /readyz 추가
+- [x] T16-03 통계 페이징 DTO, LinkStore 페이징 쿼리, GET /stat 봉투 응답 구현. Owner: antigravity; Files: `src/model.rs`, `src/store.rs`, `src/http.rs`; Note: StatQueryParams, PaginatedLinkStatsResponse 구현 및 MongoDB count_documents/skip/limit 페이징 적용
+- [x] T16-04 AppMetrics 및 GET /metrics 프로메테우스 포맷 구현. Owner: antigravity; Files: `src/metrics.rs`, `src/lib.rs`, `src/http.rs`; Note: AtomicU64 카운터 기반 text/plain; version=0.0.4 프로메테우스 exposition 구현 및 미들웨어 적용
+- [x] T16-05 신규 엔드포인트 및 페이징 단위/통합 테스트 추가. Owner: antigravity; Files: `src/model.rs`, `src/metrics.rs`, `tests/api.rs`; Note: 23개 단위 테스트, 12개 통합 테스트 전체 통과
+- [x] T16-06 README 문서 갱신 및 전체 품질 검증(fmt, clippy, test, build). Owner: antigravity; Files: `README.md`, `doc/TASKS.md`; Note: `cargo fmt --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --all-features --locked`, `cargo build --release --locked` 모두 통과
+
+

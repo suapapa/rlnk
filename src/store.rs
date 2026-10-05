@@ -24,6 +24,7 @@ const DUPLICATE_KEY_CODE: i32 = 11_000;
 #[async_trait]
 pub trait LinkStore: Clone + Send + Sync + 'static {
     async fn create_indexes(&self) -> Result<(), AppError>;
+    async fn ping(&self) -> Result<(), AppError>;
     async fn insert_link(
         &self,
         hash: &str,
@@ -37,12 +38,18 @@ pub trait LinkStore: Clone + Send + Sync + 'static {
     ) -> Result<Option<LinkDocument>, AppError>;
     async fn record_access(&self, hash: &str, accessed_at: DateTime) -> Result<bool, AppError>;
     async fn delete_link(&self, hash: &str) -> Result<bool, AppError>;
-    async fn list_links(&self, now: DateTime) -> Result<Vec<LinkDocument>, AppError>;
+    async fn list_links(
+        &self,
+        now: DateTime,
+        limit: usize,
+        offset: u64,
+    ) -> Result<(Vec<LinkDocument>, u64), AppError>;
 }
 
 /// MongoDB-backed link repository.
 #[derive(Clone, Debug)]
 pub struct MongoLinkStore {
+    database: mongodb::Database,
     collection: Collection<LinkDocument>,
 }
 
@@ -52,7 +59,10 @@ impl MongoLinkStore {
         let database = client.database(&config.mongo_database);
         let collection = database.collection::<LinkDocument>(&config.mongo_collection);
 
-        Ok(Self { collection })
+        Ok(Self {
+            database,
+            collection,
+        })
     }
 }
 
@@ -82,6 +92,14 @@ impl LinkStore for MongoLinkStore {
             .create_indexes([unique_hash_index, ttl_index])
             .await?;
 
+        Ok(())
+    }
+
+    async fn ping(&self) -> Result<(), AppError> {
+        self.database
+            .run_command(doc! { "ping": 1 })
+            .await
+            .map_err(AppError::Database)?;
         Ok(())
     }
 
@@ -137,15 +155,32 @@ impl LinkStore for MongoLinkStore {
         Ok(result.deleted_count > 0)
     }
 
-    async fn list_links(&self, now: DateTime) -> Result<Vec<LinkDocument>, AppError> {
-        self.collection
-            .find(active_links_filter(now))
-            .sort(doc! { "created_at": -1_i32 })
+    async fn list_links(
+        &self,
+        now: DateTime,
+        limit: usize,
+        offset: u64,
+    ) -> Result<(Vec<LinkDocument>, u64), AppError> {
+        let filter = active_links_filter(now);
+        let total = self
+            .collection
+            .count_documents(filter.clone())
+            .await
+            .map_err(AppError::Database)?;
+
+        let documents = self
+            .collection
+            .find(filter)
+            .sort(doc! { "created_at": -1_i32, "hash": 1_i32 })
+            .skip(offset)
+            .limit(limit as i64)
             .await
             .map_err(AppError::Database)?
             .try_collect::<Vec<_>>()
             .await
-            .map_err(AppError::Database)
+            .map_err(AppError::Database)?;
+
+        Ok((documents, total))
     }
 }
 
@@ -164,6 +199,10 @@ impl MemoryLinkStore {
 #[async_trait]
 impl LinkStore for MemoryLinkStore {
     async fn create_indexes(&self) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn ping(&self) -> Result<(), AppError> {
         Ok(())
     }
 
@@ -227,7 +266,12 @@ impl LinkStore for MemoryLinkStore {
         Ok(removed.is_some())
     }
 
-    async fn list_links(&self, now: DateTime) -> Result<Vec<LinkDocument>, AppError> {
+    async fn list_links(
+        &self,
+        now: DateTime,
+        limit: usize,
+        offset: u64,
+    ) -> Result<(Vec<LinkDocument>, u64), AppError> {
         let mut links = self
             .links
             .read()
@@ -237,14 +281,23 @@ impl LinkStore for MemoryLinkStore {
             .cloned()
             .collect::<Vec<_>>();
 
+        let total = links.len() as u64;
+
         links.sort_by(|left, right| {
             right
                 .created_at
                 .timestamp_millis()
                 .cmp(&left.created_at.timestamp_millis())
+                .then_with(|| left.hash.cmp(&right.hash))
         });
 
-        Ok(links)
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(links.len());
+        let end = start.saturating_add(limit).min(links.len());
+        let page = links[start..end].to_vec();
+
+        Ok((page, total))
     }
 }
 

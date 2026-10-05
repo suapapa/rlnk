@@ -6,5 +6,6 @@ pub mod config;
 pub mod error;
 pub mod hash;
 pub mod http;
+pub mod metrics;
 pub mod model;
 pub mod store;

@@ -38,6 +38,50 @@ pub struct LinkStatsResponse {
     pub last_accessed_at: Option<String>,
 }
 
+pub const DEFAULT_STAT_LIMIT: usize = 50;
+pub const MAX_STAT_LIMIT: usize = 1000;
+
+/// Query parameters for `GET /stat`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct StatQueryParams {
+    #[serde(default = "default_stat_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: u64,
+}
+
+const fn default_stat_limit() -> usize {
+    DEFAULT_STAT_LIMIT
+}
+
+impl Default for StatQueryParams {
+    fn default() -> Self {
+        Self {
+            limit: DEFAULT_STAT_LIMIT,
+            offset: 0,
+        }
+    }
+}
+
+impl StatQueryParams {
+    pub fn normalized_limit(&self) -> usize {
+        if self.limit == 0 {
+            DEFAULT_STAT_LIMIT
+        } else {
+            self.limit.min(MAX_STAT_LIMIT)
+        }
+    }
+}
+
+/// Paginated link summary envelope returned by `GET /stat`.
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PaginatedLinkStatsResponse {
+    pub items: Vec<LinkStatsResponse>,
+    pub total: u64,
+    pub limit: usize,
+    pub offset: u64,
+}
+
 /// Validated input for creating a new short link.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NewLink {
@@ -213,5 +257,25 @@ mod tests {
         let short_url = build_short_url("https://rlnk.test", "abc123");
 
         assert_eq!(short_url, "https://rlnk.test/abc123");
+    }
+
+    #[test]
+    fn stat_query_params_should_apply_defaults_and_clamping() {
+        let default_params = super::StatQueryParams::default();
+        assert_eq!(default_params.limit, 50);
+        assert_eq!(default_params.offset, 0);
+        assert_eq!(default_params.normalized_limit(), 50);
+
+        let zero_limit = super::StatQueryParams {
+            limit: 0,
+            offset: 10,
+        };
+        assert_eq!(zero_limit.normalized_limit(), 50);
+
+        let large_limit = super::StatQueryParams {
+            limit: 5000,
+            offset: 0,
+        };
+        assert_eq!(large_limit.normalized_limit(), 1000);
     }
 }

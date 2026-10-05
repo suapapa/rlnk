@@ -1,15 +1,15 @@
-//! HTTP router and handlers.
-
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering};
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
-    http::{HeaderMap, StatusCode},
-    response::Redirect,
+    extract::{Path, Query, Request, State},
+    http::{HeaderMap, StatusCode, header},
+    middleware::Next,
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use mongodb::bson::DateTime;
+use serde::Serialize;
 use tower_http::trace::TraceLayer;
 
 use crate::{
@@ -18,11 +18,16 @@ use crate::{
     config::AppConfig,
     error::AppError,
     hash::HashGenerator,
-    model::{CreateLinkRequest, CreateLinkResponse, LinkDocument, LinkStatsResponse},
+    metrics::AppMetrics,
+    model::{
+        CreateLinkRequest, CreateLinkResponse, LinkDocument, LinkStatsResponse,
+        PaginatedLinkStatsResponse, StatQueryParams,
+    },
     store::LinkStore,
 };
 
 const MAX_HASH_GENERATION_ATTEMPTS: usize = 8;
+const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
 
 /// Shared application state injected into handlers.
 #[derive(Clone)]
@@ -31,19 +36,26 @@ pub struct AppState<R> {
     store: R,
     hash_generator: HashGenerator,
     access_cache: AccessCache,
+    metrics: Arc<AppMetrics>,
 }
 
 impl<R> AppState<R> {
     pub fn new(config: Arc<AppConfig>, store: R) -> Self {
         let hash_generator = HashGenerator::new(config.hash_length);
         let access_cache = AccessCache::new(config.access_cache_size);
+        let metrics = Arc::new(AppMetrics::default());
 
         Self {
             config,
             store,
             hash_generator,
             access_cache,
+            metrics,
         }
+    }
+
+    pub fn metrics(&self) -> &Arc<AppMetrics> {
+        &self.metrics
     }
 }
 
@@ -53,14 +65,84 @@ where
     R: LinkStore,
 {
     Router::new()
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz::<R>))
+        .route("/metrics", get(metrics_exposition::<R>))
         .route("/stat", get(list_links::<R>))
         .route("/gen", post(create_link::<R>))
         .route(
             "/{hash}",
             get(redirect_to_link::<R>).delete(delete_link::<R>),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            track_request_metrics::<R>,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn track_request_metrics<R>(
+    State(state): State<AppState<R>>,
+    request: Request,
+    next: Next,
+) -> Response
+where
+    R: LinkStore,
+{
+    state
+        .metrics
+        .http_requests_total
+        .fetch_add(1, Ordering::Relaxed);
+    next.run(request).await
+}
+
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
+}
+
+#[derive(Serialize)]
+struct ReadyResponse {
+    status: &'static str,
+    database: &'static str,
+}
+
+async fn healthz() -> (StatusCode, Json<HealthResponse>) {
+    (StatusCode::OK, Json(HealthResponse { status: "ok" }))
+}
+
+async fn readyz<R>(State(state): State<AppState<R>>) -> (StatusCode, Json<ReadyResponse>)
+where
+    R: LinkStore,
+{
+    match state.store.ping().await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(ReadyResponse {
+                status: "ready",
+                database: "connected",
+            }),
+        ),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ReadyResponse {
+                status: "unready",
+                database: "disconnected",
+            }),
+        ),
+    }
+}
+
+async fn metrics_exposition<R>(State(state): State<AppState<R>>) -> Response
+where
+    R: LinkStore,
+{
+    (
+        [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
+        state.metrics.render_prometheus(),
+    )
+        .into_response()
 }
 
 async fn create_link<R>(
@@ -80,6 +162,10 @@ where
         let hash = state.hash_generator.generate();
         match state.store.insert_link(&hash, &new_link, now).await {
             Ok(document) => {
+                state
+                    .metrics
+                    .links_created_total
+                    .fetch_add(1, Ordering::Relaxed);
                 return Ok(Json(
                     document.into_create_response(&state.config.app_hostname),
                 ));
@@ -105,6 +191,10 @@ where
     let deleted = state.store.delete_link(&hash).await?;
     state.access_cache.invalidate(&hash).await;
     if deleted {
+        state
+            .metrics
+            .links_deleted_total
+            .fetch_add(1, Ordering::Relaxed);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound)
@@ -120,7 +210,15 @@ where
 {
     let accessed_at = DateTime::now();
     if let Some(cached) = state.access_cache.get(&hash, accessed_at).await {
+        state
+            .metrics
+            .cache_hits_total
+            .fetch_add(1, Ordering::Relaxed);
         if state.store.record_access(&hash, accessed_at).await? {
+            state
+                .metrics
+                .redirects_total
+                .fetch_add(1, Ordering::Relaxed);
             return Ok(Redirect::temporary(&cached.original_url));
         }
 
@@ -128,10 +226,18 @@ where
         return Err(AppError::NotFound);
     }
 
+    state
+        .metrics
+        .cache_misses_total
+        .fetch_add(1, Ordering::Relaxed);
     let Some(link) = state.store.touch_link(&hash, accessed_at).await? else {
         return Err(AppError::NotFound);
     };
 
+    state
+        .metrics
+        .redirects_total
+        .fetch_add(1, Ordering::Relaxed);
     state.access_cache.remember(&link).await;
     Ok(Redirect::temporary(&link.original_url))
 }
@@ -139,17 +245,26 @@ where
 async fn list_links<R>(
     State(state): State<AppState<R>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<LinkStatsResponse>>, AppError>
+    Query(params): Query<StatQueryParams>,
+) -> Result<Json<PaginatedLinkStatsResponse>, AppError>
 where
     R: LinkStore,
 {
     authorize(&headers, &state.config.app_key)?;
 
-    let documents = state.store.list_links(DateTime::now()).await?;
-    Ok(Json(to_stats_responses(
-        documents,
-        &state.config.app_hostname,
-    )))
+    let limit = params.normalized_limit();
+    let offset = params.offset;
+    let (documents, total) = state
+        .store
+        .list_links(DateTime::now(), limit, offset)
+        .await?;
+
+    Ok(Json(PaginatedLinkStatsResponse {
+        items: to_stats_responses(documents, &state.config.app_hostname),
+        total,
+        limit,
+        offset,
+    }))
 }
 
 fn to_stats_responses(documents: Vec<LinkDocument>, app_hostname: &str) -> Vec<LinkStatsResponse> {

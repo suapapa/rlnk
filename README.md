@@ -62,11 +62,32 @@ curl -X DELETE http://localhost:8080/abc123 \
   -H 'Authorization: Bearer dev-secret'
 ```
 
-Fetch statistics:
+Fetch statistics (supports optional `limit` and `offset` query parameters):
 
 ```sh
-curl http://localhost:8080/stat \
+curl 'http://localhost:8080/stat?limit=50&offset=0' \
   -H 'Authorization: Bearer dev-secret'
+```
+
+Response format:
+
+```json
+{
+  "items": [
+    {
+      "hash": "abc12345",
+      "short_url": "http://localhost:8080/abc12345",
+      "original_url": "https://example.com",
+      "access_count": 1,
+      "created_at": "2026-10-05T01:00:00Z",
+      "expires_at": "2026-10-05T01:10:00Z",
+      "last_accessed_at": "2026-10-05T01:05:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
 ```
 
 Resolve a short URL:
@@ -74,3 +95,22 @@ Resolve a short URL:
 ```sh
 curl -i http://localhost:8080/abc123
 ```
+
+Check service liveness:
+
+```sh
+curl -i http://localhost:8080/healthz
+```
+
+Check database readiness:
+
+```sh
+curl -i http://localhost:8080/readyz
+```
+
+Scrape Prometheus metrics:
+
+```sh
+curl http://localhost:8080/metrics
+```
+

@@ -80,8 +80,16 @@
   - 원본 URL로 리다이렉트한다.
 - `GET /stat`
   - `Authorization` 헤더를 검증한다.
-  - 생성된 링크들의 hash, short URL, 원본 링크, 접근 횟수, 생성 시각, 만료 시각, 마지막 접근 일자를 반환한다.
-  - 초기 버전은 전체 목록을 반환하되, 데이터가 늘어나는 상황을 고려해 pagination 추가 지점을 남긴다.
+  - 선택 쿼리 파라미터 `limit`(기본값 50, 최대 1000)과 `offset`(기본값 0)을 받는다.
+  - 저장소에서 총 링크 개수(`total`)와 해당 페이지 문서 목록을 조회한다.
+  - `{ items: [...], total, limit, offset }` 봉투 구조로 반환한다.
+- `GET /healthz`
+  - 인증 없이 200 OK와 `{"status":"ok"}`를 반환하는 liveness probe.
+- `GET /readyz`
+  - 인증 없이 데이터베이스 ping 상태를 확인하는 readiness probe. 정상 시 200 OK, 비정상 시 503 Service Unavailable을 반환한다.
+- `GET /metrics`
+  - 인증 없이 프로메테우스 exposition format(`text/plain; version=0.0.4`)으로 요청 수, 리다이렉트 수, 생성/삭제 링크 수, 캐시 적중/실패 수를 반환한다.
+
 
 ## 7. 인증 정책
 
@@ -163,7 +171,18 @@
 12. 릴리스 태그에서만 도커 이미지를 빌드하도록 CI 워크플로를 관리한다.
 13. `fmt`, `clippy`, `test`, release build를 실행해 마무리 검증한다.
 
-## 14. 미정 사항
+## 15. 백엔드 기능 확장 구현 계획
+
+- `LinkStore` 트레이트에 `ping` 메서드 추가 및 `list_links` 페이징 파라미터(`limit`, `offset`) 지원.
+- MongoDB `ping` 명령어 실행 및 `count_documents`, `skip`, `limit` 쿼리 파라미터 적용.
+- `MemoryLinkStore`에 슬라이스 기반 페이징 및 더미 `ping` 구현.
+- `StatQueryParams` 및 `PaginatedLinkStatsResponse` DTO 구현.
+- `std::sync::atomic::AtomicU64` 기반 경량 `AppMetrics` 구현 및 프로메테우스 포맷 렌더러 추가.
+- `GET /healthz`, `GET /readyz`, `GET /metrics` 라우트 등록 (와일드카드 `/{hash}` 라우트 앞에 배치).
+- 통합 테스트(`tests/api.rs`) 및 사용자 문서(`README.md`) 갱신.
+
+## 16. 미정 사항
+
 
 - TTL 입력은 duration 문자열로 확정했다.
 - `GET /stat`는 같은 `APP_KEY` 기반 인증을 적용하기로 확정했다.
